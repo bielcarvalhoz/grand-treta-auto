@@ -3,6 +3,7 @@ import { loadJSON } from '../shared/load-json.js';
 import { buildCampusGrass } from '../map/index.js';
 import { prepareCampus, buildCampus, campusQA } from './campus.js';
 import { gradeCampusTerrain } from './grading.js';
+import { gradeLandmarks } from './landmarks.js';
 
 // API pública do CAMPUS — núcleo Cidade de Deus (matriz do Bradesco).
 // Entra no mapa como plugin (ver ganchos em src/map/index.js). Outros módulos importam SÓ daqui.
@@ -31,7 +32,10 @@ export function createCampusPlugin(game, campusGeo) {
     },
 
     shapeTerrain(map) {
-      if (plugin.data) plugin.grading = gradeCampusTerrain(map.world, map.terrain, plugin.data);
+      if (!plugin.data) return;
+      plugin.grading = gradeCampusTerrain(map.world, map.terrain, plugin.data);
+      // cortes finos sob escadarias e acessos levantados em campo (depois das vias e plataformas)
+      plugin.grading.landmarks = gradeLandmarks(map.world, map.terrain, plugin.data);
     },
 
     // chão do campus em alta resolução (vagas, quadras, raias, gramados)

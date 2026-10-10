@@ -149,7 +149,8 @@ export function buildCampusDetails(C, specs, { renderer, terrain, world, quality
   };
 
   for (const { b, info } of specs) {
-    if (!b.name || b.gateBuilding || b.style === 'garage') continue;
+    // acessos levantados em campo (landmarks.js) substituem a entrada genérica
+    if (!b.name || b.gateBuilding || b.style === 'garage' || b.referenceAccess) continue;
     const p = facadeProfile(b);
     let e = b.planId==='b3' && pair ? pair.red : b.planId==='b5' && pair ? pair.ruby : referenceEntrance(b, world.roads, (x, z) => C.inRegion(x, z, .3) && !C.insideSolid(x, z, .2));
     if (!e) continue;

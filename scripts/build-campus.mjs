@@ -41,14 +41,17 @@ const SRC_SAT = 'medido na imagem de satélite';
 const add = (props, geometry) => features.push({ type: 'Feature', properties: props, geometry });
 const poly = (props, ring, holes = []) => add(props, { type: 'Polygon', coordinates: [ring, ...holes] });
 const point = (props, latlon) => add(props, { type: 'Point', coordinates: ll(latlon) });
+const line = (props, pts) => add(props, { type: 'LineString', coordinates: pts.map(ll) });
 
 // ---------------------------------------------------------------- prédios (planta oficial)
 const B = (id, props) => poly({ kind: 'building', source: SRC_PLAN, planId: id, ...props }, plan.predios[id]);
 const M = (id, props) => poly({ kind: 'building', source: SRC_PLAN, planId: id, style: 'pavilion', roofShape: 'green', levels: 1, height: 5, wall: '#e9e6df', roof: '#6f8f3e', windows: '#28404f', ...props }, plan.modulos[id]);
 
 B('b1', { name: 'Prédio Cinza', num: 1, levels: 4, height: 16, wall: '#c4c9cd', roof: '#8e949a', windows: '#26323f', roofItems: 'skylights' });
-B('b8', { name: 'Prédio Balança', num: 2, levels: 2, height: 7, wall: '#e6ded1', roof: '#8b5a3c', windows: '#2b3f55' });
-B('b6', { name: 'Prédio Prata', num: 4, levels: 6, height: 22, wall: '#eceae4', roof: '#c4c8cb', windows: '#2b3f55', accent: 'banner', accentColor: RED, towerBox: { at: 0.32 } });
+// Balança: laje plana de concreto bege (não é telhado marrom); semienterrado do lado da rua do Prata.
+B('b8', { name: 'Prédio Balança', num: 2, levels: 2, height: 7, wall: '#e6ded1', roof: '#d6cab4', windows: '#2b3f55' });
+// Prata: 6 andares acima do andar zero (rua de trás); o banner fica a ~2/3 da fachada sul a partir da ponta leste.
+B('b6', { name: 'Prédio Prata', num: 4, levels: 6, height: 22, wall: '#eceae4', roof: '#c4c8cb', windows: '#2b3f55', accent: 'banner', accentColor: RED, bannerEast: 0.68, towerBox: { at: 0.32 } });
 B('b3', {
   name: 'Prédio Vermelho', num: 5, levels: 4, height: 16, wall: '#e8eaec', roof: '#b9bdc1', windows: '#2b3f55',
   accent: 'frisos', accentColor: RED, glassSide: true,
@@ -148,6 +151,29 @@ point({ kind: 'gate', type: 'pedestre', name: 'Portaria Bussocaba (pedestres)', 
 point({ kind: 'gate', type: 'pedestre', name: 'Portaria Goiabinha (pedestres)', num: 7 }, [-23.5498934, -46.7739968]);
 point({ kind: 'gate', type: 'portaria', name: 'Portaria Wenceslau Braz', num: 8, building: true }, [-23.550003, -46.771147]);
 point({ kind: 'gate', type: 'portaria', name: 'Portaria Vila Yara', num: 9 }, [-23.547399, -46.766712]);
+
+// ---------------------------------------------------------------- marcos levantados em campo
+// Vídeos e fotos de quem trabalha no campus (10/2026); coordenadas medidas na planta oficial
+// e na imagem aérea. Nenhuma imagem entra no jogo — só posições e atributos.
+const SRC_FIELD = 'vídeos/fotos do usuário (10/2026) + planta oficial';
+// Escadaria da mata: da Rua Três (anel do Prédio Azul) até o lado da Agência / Portaria 10.
+// Eixo traçado sobre a planta oficial (zigue-zague com a praça redonda dos bancos).
+line({ kind: 'stairway', id: 'escadaria-mata', name: 'Escadaria da mata', source: SRC_FIELD, width: 3, plaza: 3, plazaRadius: 2.7, sawtoothFrom: 3 }, [
+  [-23.5465196, -46.7713852], [-23.5465829, -46.7714589], [-23.5465569, -46.7715094],
+  [-23.5465629, -46.7716002], [-23.5465874, -46.7716887], [-23.5466399, -46.7717163],
+]);
+// Passarela de grades verdes do pé da escada até a via da Portaria Bussocaba.
+line({ kind: 'walkway', id: 'passarela-agencia', from: 'escadaria-mata', source: SRC_FIELD, width: 2.2 }, [[-23.5466399, -46.7717163], [-23.54673, -46.771962]]);
+// Locomotiva 801 ao lado do CTI: frente (limpa-trilhos) para ESE, trilho de exposição de 26 m.
+point({ kind: 'landmark', type: 'locomotiva', name: 'Locomotiva 801', source: SRC_FIELD, heading: 113 }, [-23.546803, -46.768288]);
+// Beco com escada na ponta leste do Balança (do estacionamento à rua do Prata).
+point({ kind: 'landmark', type: 'beco', building: 'b8', toward: 'b6', end: 'leste', offset: 5.2, width: 2.6, source: SRC_FIELD }, [-23.5479607, -46.7738679]);
+// Entradas do Prata: -2 ao pé da torre da fachada norte; fundos do andar zero na fachada sul.
+point({ kind: 'landmark', type: 'entrada', id: 'prata-menos2', building: 'b6', source: SRC_FIELD }, [-23.5482144, -46.7739443]);
+point({ kind: 'landmark', type: 'entrada', id: 'prata-terreo', building: 'b6', source: SRC_FIELD }, [-23.5484477, -46.773697]);
+// A rua entre o Balança e o Prata passa rente ao Balança (o eixo do OSM encosta no Prata e não
+// deixa lugar para a calçada e a entrada do -2): miolo do eixo 5 m para o norte.
+line({ kind: 'roadFix', way: 'way/866315705', source: SRC_FIELD }, [[-23.5482323, -46.7742755], [-23.5479618, -46.773486]]);
 
 // ---------------------------------------------------------------- árvores
 add({ kind: 'trees', source: 'copas detectadas na imagem de satélite' }, { type: 'MultiPoint', coordinates: arvores.map(([lon, lat]) => [lon, lat]) });
