@@ -10,7 +10,7 @@ quebrar o trabalho de quem cuida de outro módulo.
 |---|---|---|---|
 | `src/core/` | Núcleo / motor | renderer, cena, câmera, céu, luz e sombra, laço de sistemas, eventos, atalhos de teclado, física compartilhada, visual cartoon/pixel, perfil gráfico, câmera de tour, configurações persistentes, lotes de instâncias, áudio procedural | pós-processamento, ciclo dia/noite, otimização de desempenho |
 | `src/map/` | Mapa (mundo real) | relevo SRTM, vias, prédios do OSM, prédios procedurais, vegetação, água, muros, semáforos, placas, destinos do entorno | melhorar ruas, novos tipos de prédio, mais vegetação |
-| `src/campus/` | Campus Cidade de Deus | núcleo do Bradesco: prédios da planta oficial, muros, portarias, estacionamentos, terraplenagem, detalhes | novo prédio, fachada, mobiliário do campus |
+| `src/campus/` | Campus Cidade de Deus | núcleo do Bradesco: prédios da planta oficial, muros, portarias, estacionamentos, terraplenagem, detalhes, marcos levantados em campo (`landmarks.js`: escadaria, beco, acessos, locomotiva) | novo prédio, fachada, mobiliário do campus |
 | `src/player/` | Personagem | controle em primeira pessoa: teclado, mouse, toque, colisão, pulo, voo | modelo/avatar, animação, corrida, agachar |
 | `src/gameplay/<mecânica>/` | Jogabilidade | uma pasta por mecânica; hoje `paintball/` (pistola e metralhadora de tinta, gatilho e mira focada) | missões, carros, coletáveis, multiplayer |
 | `src/ui/` | Interface | tela de carregamento, menu, HUD, minimapa, mapa grande, avisos, gestos mobile, CSS | novas telas, configurações, acessibilidade |

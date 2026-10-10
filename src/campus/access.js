@@ -128,7 +128,8 @@ export function buildCampusFoundations(C,specs,{terrain}) {
   const A=assembly('bases-e-acessos-laterais-campus',terrain),{slab,rail,H}=A;
   const stairs=[];
   for(const {b,info} of specs){
-    if(b.gateBuilding||b.structure==='pergola')continue;
+    // prédios em encosta com acessos levantados em campo: o relevo encosta na fachada, sem sapata
+    if(b.gateBuilding||b.structure==='pergola'||b.referenceAccess)continue;
     let count=0;
     for(const edge of exteriorEdges(b.rings[0])){
       const segments=Math.max(1,Math.ceil(edge.L/2));

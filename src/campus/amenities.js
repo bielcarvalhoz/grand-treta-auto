@@ -93,7 +93,8 @@ export function planCampusAmenities(C, world) {
     });
     gates.push({ ...frame, gate, vehicle, lanes, approximate: true });
   }
-  const train = trainByCTI(C, world);
+  // A locomotiva levantada em campo (landmarks.js) dispensa a posição aproximada.
+  const train = C.locomotive ? null : trainByCTI(C, world);
   const exclusions = [
     ...stops.map((stop) => ({ kind: 'move', rings: [stop.ring], padding: 1.2 })),
     ...gates.flatMap((gate) => gate.lanes.map((lane) => ({ kind: 'catraca', rings: [lane.ring], padding: .4 }))),

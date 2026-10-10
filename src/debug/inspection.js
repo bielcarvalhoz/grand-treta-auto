@@ -12,9 +12,17 @@ export function inspectScene(app, view) {
     const B=campus.details.root.userData.bridge,x=(B.red.x+B.ruby.x)/2,z=(B.red.z+B.ruby.z)/2;
     camera.position.set(x-B.red.dx*19,terrain.heightAt(x,z)+3.3,z-B.red.dz*19);
     camera.lookAt(x,Math.min(B.floor,terrain.heightAt(x,z)+7),z);
+  } else if(['escadaria','beco','menos2','terreo'].includes(view)&&campus.landmarks){
+    // marcos levantados em campo: câmera na altura dos olhos, no começo do percurso
+    const L=campus.landmarks.plan,S=L.stairways[0],A=L.access;
+    const eye=(p,q,dy=0)=>{const at=(x,z)=>Math.max(terrain.heightAt(x,z),campus.surfaceHeightAt(x,z,Infinity));camera.position.set(p[0],at(...p)+1.7,p[1]);camera.lookAt(q[0],at(...q)+1.2+dy,q[1]);};
+    if(view==='escadaria'&&S){const f=S.flights[0];eye([S.path[0][0]-f.d[0]*3,S.path[0][1]-f.d[1]*3],f.b);}
+    else if(view==='beco'&&A.alley)eye(A.alley.path[0].map((v,i)=>v-(A.alley.path[1][i]-A.alley.path[0][i])*.35),A.alley.path[1]);
+    else if(view==='menos2'&&A.lower&&A.alley)eye(A.alley.path[1],[A.lower.x,A.lower.z],1);
+    else if(view==='terreo'&&A.ground0)eye(A.ground0.path[0].map((v,i)=>v+(A.ground0.path[0][i]-A.ground0.path[1][i])*2.2),A.ground0.path[1],1);
   } else if((view==='move'||view==='trem'||view==='portaria')&&campus.amenities){
     const plan=campus.amenities.plan;
-    const p=view==='trem'?plan.train:view==='move'?plan.stops[0]:plan.gates.find(g=>g.gate.num===10)||plan.gates[0];
+    const p=view==='trem'?(campus.landmarks?.plan.locomotive||plan.train):view==='move'?plan.stops[0]:plan.gates.find(g=>g.gate.num===10)||plan.gates[0];
     if(p){camera.position.set(p.x+10,terrain.heightAt(p.x,p.z)+4,p.z+10);camera.lookAt(p.x,terrain.heightAt(p.x,p.z)+1.5,p.z);}
   } else if (b) {
     const entry = campus.details.entrances.find(e => e.name === b.name);
@@ -64,6 +72,7 @@ export function inspectScene(app, view) {
     bluePlaza: details.root.userData.bluePlaza,
     amenities: campus.amenities?.stats,
     amenityPlan: campus.amenities?.plan,
+    landmarks: campus.landmarks?.stats, landmarkAccess: campus.landmarks?.plan.access,
     foundationStairs: campus.foundations?.stairs,
     signLocations: details.signLocations,
     rectifiedBuildings: C.buildings.filter(b=>b.referenceRectified).map(b=>b.name),

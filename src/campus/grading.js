@@ -1,5 +1,6 @@
 import { distToSegment } from '../shared/geo.js';
 import { referenceEntrance, pairedEntrances } from './reference.js';
+import { landmarkPlatformLevels } from './landmarks.js';
 
 // Terraplenagem do campus (pista, prédios, acessos), aplicada depois da escavação da água
 // e antes de gerar a malha do relevo. Usa só a API pública do relevo do mapa
@@ -58,6 +59,8 @@ export function gradeCampusTerrain(world, terrain, campus) {
       frontageLevels.set('b3', level); frontageLevels.set('b5', level);
     }
   }
+  // Marcos levantados em campo (ex.: o Balança semienterrado assenta no nível do estacionamento).
+  for (const [id, level] of landmarkPlatformLevels(campus, world, terrain)) frontageLevels.set(id, level);
   for (const b of campus.buildings) {
     if (b.structure === 'pergola') continue;
     report.platforms.push(terrain.prepareBuildingPlatform(b, { preserve, level: frontageLevels.get(b.planId || b.id) }));

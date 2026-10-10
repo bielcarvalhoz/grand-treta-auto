@@ -11,6 +11,7 @@ import { createSidewalkTrees } from '../map/index.js';
 import { campusWallGeometry } from './wall.js';
 import { buildCampusFoundations } from './access.js';
 import { buildCampusAmenities } from './amenities.js';
+import { prepareLandmarks, buildLandmarks } from './landmarks.js';
 import { createRegionTest } from '../shared/regions.js';
 import { halveTrees } from '../shared/tree-density.js';
 
@@ -172,11 +173,17 @@ export function prepareCampus(geo, world, proj) {
     } else if (g.type === 'Point') {
       const [x, z] = proj.toLocal(g.coordinates[0], g.coordinates[1]);
       if (p.kind === 'gate') C.gates.push({ ...p, x, z });
+      else if (p.kind === 'landmark') (C.landmarks ||= []).push({ ...p, x, z });
       else C.points.push({ ...p, x, z });
+    } else if (g.type === 'LineString') {
+      (C.paths ||= []).push({ ...p, pts: g.coordinates.map(([lon, lat]) => proj.toLocal(lon, lat)) });
     } else if (g.type === 'MultiPoint' && p.kind === 'trees') {
       C.treePts = g.coordinates.map(([lon, lat]) => proj.toLocal(lon, lat));
     }
   }
+
+  // -- marcos de referência (beco que divide o Balança, acessos, locomotiva)
+  prepareLandmarks(C, world);
 
   // -- pista de atletismo em volta do campo de futebol
   if (pitch) {
@@ -296,12 +303,16 @@ export function prepareCampus(geo, world, proj) {
     const L = Math.hypot(ex - ax, ez - az) || 1, tx = (ex - ax) / L, tz = (ez - az) / L;
     let nx = -tz, nz = tx;
     if ((bx - best.cx) * nx + (bz - best.cz) * nz < 0) { nx = -nx; nz = -nz; }
-    for (const off of [best.r.w / 2 + 1.8, best.r.w / 2 + 2.6]) {
-      const x = best.cx + nx * off, z = best.cz + nz * off;
+    // fora dos acessos levantados em campo (o ponto desliza pela via até ficar livre)
+    const keepClear = (C.landmarks || []).filter((m) => m.type === 'entrada' || m.type === 'beco');
+    place: for (const shift of [0, 16, -16, 26, -26]) for (const off of [best.r.w / 2 + 1.8, best.r.w / 2 + 2.6]) {
+      const x = best.cx + tx * shift + nx * off, z = best.cz + tz * shift + nz * off;
+      if (keepClear.some((m) => Math.hypot(m.x - x, m.z - z) < 17)) continue;
+      if (shift && (best.t * L + shift < 2 || best.t * L + shift > L - 2)) continue;
       if (insideSolid(x, z, 1.5) || nearWall(x, z, 1.5) || RIi.clearance(x, z).d < 0.8 || !C.inRegion(x, z, 1.5)) continue;
       if (C.cars.some((c) => Math.hypot(c.x - x, c.z - z) < 3.5)) continue;
       C.busStops.push({ x, z, yaw: Math.atan2(-nx, -nz) + Math.PI, near: name });
-      break;
+      break place;
     }
   }
 
@@ -716,8 +727,10 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
       // banner vertical vermelho no centro da fachada sul mais longa
       const e = edges.filter((x) => x.L > A.L * 0.6).sort((p, q) => q.nz - p.nz)[0];
       if (e) {
-        const mx = (e.ax + e.bx) / 2 + e.nx * 0.25, mz = (e.az + e.bz) / 2 + e.nz * 0.25;
-        const h0 = info.gMin + 6, h1 = info.top - 1.2;
+        // posição medida a partir da ponta leste da fachada (bannerEast: 0 = leste, 1 = oeste)
+        const t = e.ax > e.bx ? (b.bannerEast ?? .5) : 1 - (b.bannerEast ?? .5);
+        const mx = e.ax + (e.bx - e.ax) * t + e.nx * 0.25, mz = e.az + (e.bz - e.az) * t + e.nz * 0.25;
+        const h0 = (b.frontLevel ?? info.gMin) + 6, h1 = info.top - 1.2;
         box(accent, mx, (h0 + h1) / 2, mz, 8, h1 - h0, 0.3, yawOf(e.dx, e.dz));
         const banner = new THREE.Mesh(new THREE.PlaneGeometry(7.9, h1 - h0 - .12), new THREE.MeshBasicMaterial({ map: bradescoBannerTexture(renderer) }));
         banner.name = 'banner-predio-prata';
@@ -993,7 +1006,11 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
   const amenities=buildCampusAmenities(C,{renderer,terrain,world,sidewalkHeightAt:roads?.sidewalkHeightAt});
   root.add(amenities.root);
   for(const solid of amenities.solids)builder.addSolid(solid.rings,solid.top,null);
-  const exclusions=[...details.exclusions,...foundations.exclusions,...amenities.exclusions];
+  const landmarks=buildLandmarks(C,{renderer,terrain,world,roads});
+  root.add(landmarks.root);
+  for(const solid of landmarks.solids)builder.addSolid(solid.rings,solid.top,null);
+  details.entrances.push(...landmarks.entrances);
+  const exclusions=[...details.exclusions,...foundations.exclusions,...amenities.exclusions,...landmarks.exclusions];
   C.detailOccupied=createRegionTest(exclusions);
   const allowedTrees=C.trees.filter(t=>!C.detailOccupied(t.x,t.z));
   C.treeSourceCount=allowedTrees.length;
@@ -1001,6 +1018,8 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
   C.palms=C.palms.filter(t=>!C.detailOccupied(t.x,t.z));
   C.cars=C.cars.filter(c=>!c.ring.some(p=>C.detailOccupied(...p)));
   C.monkeys=C.monkeys.filter(m=>!C.detailOccupied(m.x,m.z)&&(!m.onTree||C.trees.includes(m.tree)));
+  // mata em volta das escadarias de referência (não entra no sorteio que reduz as copas)
+  C.trees.push(...landmarks.trees.filter(t=>!C.detailOccupied(t.x,t.z)));
   C.streetTreeCount=C.trees.filter(t=>t.sidewalk).length;
   function pedestrianGate(g) {
     // guarita de pedestres junto ao vão do muro (lado de dentro)
@@ -1102,8 +1121,8 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
     flags.forEach((f) => { f.rotation.y = f.userData.base + Math.sin(t * 2.2 + f.userData.ph) * 0.25; });
   }
 
-  return { root, builder, sprites, update, spawnPoints, details, foundations, amenities,
-    surfaceHeightAt:(x,z,maxY)=>Math.max(details.surfaceHeightAt(x,z,maxY),foundations.surfaceHeightAt(x,z,maxY),amenities.surfaceHeightAt(x,z,maxY)),
+  return { root, builder, sprites, update, spawnPoints, details, foundations, amenities, landmarks,
+    surfaceHeightAt:(x,z,maxY)=>Math.max(details.surfaceHeightAt(x,z,maxY),foundations.surfaceHeightAt(x,z,maxY),amenities.surfaceHeightAt(x,z,maxY),landmarks.surfaceHeightAt(x,z,maxY)),
     count: C.buildings.length, cars: C.cars.length, trees: C.trees.length };
 
   // ================================================================ peças

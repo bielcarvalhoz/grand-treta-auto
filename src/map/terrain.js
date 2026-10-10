@@ -215,6 +215,63 @@ export function createTerrain(data, proj) {
     return { changed, cutFill, maxGrade: steepest, profiles: samples.size };
   }
 
+  /**
+   * Corta/aterra o relevo sob uma superfície estreita e inclinada (escadaria, rampa) que a grade
+   * de ~6 m não resolve sozinha. `samples` = pontos [x, z, y] da superfície pronta.
+   * 1) vértices a até `radius` vão para o nível do ponto mais próximo menos `clearance`, com
+   *    transição suave em `band`; 2) nenhum triângulo fica acima de um ponto (menos `minClearance`).
+   * `protect(x, z)` mantém vértices intocados (leitos de rua, plantas de prédios, água).
+   */
+  function gradeProfile(samples, { radius = 4, band = 9, clearance = .35, minClearance = .1, protect = null } = {}) {
+    if (!samples?.length) return null;
+    const reach = radius + band, grid = new SpatialGrid(Math.max(8, reach));
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    for (const s of samples) {
+      grid.insertBox(s, s[0], s[1], s[0], s[1]);
+      minX = Math.min(minX, s[0]); maxX = Math.max(maxX, s[0]); minZ = Math.min(minZ, s[1]); maxZ = Math.max(maxZ, s[1]);
+    }
+    const i0 = Math.max(0, Math.floor((minX - reach - x0) / dx)), i1 = Math.min(nx - 1, Math.ceil((maxX + reach - x0) / dx));
+    const j0 = Math.max(0, Math.floor((minZ - reach - z0) / dz)), j1 = Math.min(ny - 1, Math.ceil((maxZ + reach - z0) / dz));
+    const fixed = (i, j) => !!protect?.(x0 + i * dx, z0 + j * dz);
+    let changed = 0, cutFill = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = x0 + i * dx, z = z0 + j * dz, k = j * nx + i;
+      let nearest = Infinity, level = 0;
+      for (const s of grid.query(x, z, reach)) {
+        const d = Math.hypot(s[0] - x, s[1] - z);
+        if (d < nearest) { nearest = d; level = s[2]; }
+      }
+      if (nearest >= reach || fixed(i, j)) continue;
+      const t = Math.max(0, (nearest - radius) / band), weight = 1 - t * t * (3 - 2 * t);
+      const delta = (level - clearance - h[k]) * weight;
+      h[k] += delta;
+      if (Math.abs(delta) > .001) changed++;
+      cutFill = Math.max(cutFill, Math.abs(delta));
+    }
+    // A sample constrains exactly the three vertices of its own triangle; lowering the movable
+    // ones by excess / (their barycentric share) clears it without touching protected ground.
+    let blocked = 0;
+    for (let pass = 0; pass < 4; pass++) {
+      let worst = 0;
+      for (const [x, z, y] of samples) {
+        const fx = Math.min(nx - 1.0001, Math.max(0, (x - x0) / dx)), fz = Math.min(ny - 1.0001, Math.max(0, (z - z0) / dz));
+        const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+        const corners = u + v <= 1 ? [[i, j, 1 - u - v], [i + 1, j, u], [i, j + 1, v]] : [[i + 1, j + 1, u + v - 1], [i, j + 1, 1 - u], [i + 1, j, 1 - v]];
+        const ground = corners.reduce((sum, [a, b, w]) => sum + H(a, b) * w, 0), excess = ground - (y - minClearance);
+        if (excess <= 1e-4) continue;
+        const movable = corners.filter(([a, b]) => !fixed(a, b)), share = movable.reduce((sum, c) => sum + c[2], 0);
+        // Com quase todo o peso em vértices protegidos (leito de via), baixar o que sobra abriria
+        // um buraco ao lado; a peça fica rente ao que está protegido.
+        if (share < .3) { if (pass === 3) blocked++; continue; }
+        const drop = Math.min(excess / share, excess + 1.5);
+        for (const [a, b] of movable) h[b * nx + a] -= drop;
+        worst = Math.max(worst, excess); cutFill = Math.max(cutFill, drop); changed++;
+      }
+      if (!worst) break;
+    }
+    return { changed, cutFill, blocked };
+  }
+
   function roadHeightAt(road, x, z) {
     const profile = roadProfiles.get(road);
     if (!profile?.length) return heightAt(x, z);
@@ -381,5 +438,5 @@ export function createTerrain(data, proj) {
     return mesh;
   }
 
-  return { heightAt, roadHeightAt, platformFor: (building) => platforms.get(building), prepareBuildingPlatform, carveWater, gradePlatform, gradeCorridors, buildMesh, buildDetailMesh, base, bounds: { x0, z0, x1, z1, width, depth }, minAlt: data.min, maxAlt: data.max };
+  return { heightAt, roadHeightAt, platformFor: (building) => platforms.get(building), prepareBuildingPlatform, carveWater, gradePlatform, gradeCorridors, gradeProfile, buildMesh, buildDetailMesh, base, bounds: { x0, z0, x1, z1, width, depth }, minAlt: data.min, maxAlt: data.max };
 }
