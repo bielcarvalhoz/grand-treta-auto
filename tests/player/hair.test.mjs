@@ -8,7 +8,7 @@ test('hair changes only a small rest-shape region and preserves rig, UVs and oth
   gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
   const originals = meshes.map(mesh => ({ geometry: mesh.geometry, positions: mesh.geometry.attributes.position.array.slice() }));
   sweepHairTips(meshes);
-  let changed = 0;
+  let changed = 0, sweptFringe = 0;
   meshes.forEach((mesh, i) => {
     const old = originals[i];
     if (!mesh.name.startsWith('Sato_hair_cap')) { assert.equal(mesh.geometry, old.geometry); return; }
@@ -19,10 +19,13 @@ test('hair changes only a small rest-shape region and preserves rig, UVs and oth
     const positions = mesh.geometry.attributes.position.array;
     for (let j = 0; j < positions.length; j += 3) {
       const dx = positions[j] - old.positions[j], dy = positions[j + 1] - old.positions[j + 1], dz = positions[j + 2] - old.positions[j + 2];
-      assert.ok(Math.hypot(dx, dy, dz) < .04, 'hair change must remain subtle');
+      assert.ok(Math.hypot(dx, dy, dz) < .065, 'hair must keep its silhouette');
       assert.ok(dx >= -1e-7 && dy <= 1e-7, 'tips sweep sideways/down, rather than growing upwards');
+      if (old.positions[j + 2] < -.04 && old.positions[j + 1] < .865) assert.equal(Math.hypot(dx, dy, dz), 0, 'nape must be untouched');
+      if (old.positions[j + 2] > .09 && dx > .017) sweptFringe++;
       if (Math.hypot(dx, dy, dz) > .00001) changed++;
     }
   });
   assert.ok(changed > 0);
+  assert.ok(sweptFringe > 0, 'front tips must visibly follow the sweep toward character +X/left');
 });

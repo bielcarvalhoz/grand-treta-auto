@@ -1,5 +1,6 @@
 import { preparePaintColliders, intersectsPaintBounds } from './collision.js';
 import * as THREE from 'three';
+import { WEAPONS, createWeaponInventory } from './weapons.js';
 
 export const PAINTBALL_PALETTE = Object.freeze([
   { id: 'cinza', label: 'Cinza', color: '#88939b' },
@@ -13,11 +14,8 @@ export const PAINTBALL_PALETTE = Object.freeze([
   { id: 'marrom', label: 'Marrom', color: '#7b4a2c' },
 ].map(Object.freeze));
 
-export const PAINTBALL_LIMITS = Object.freeze({ projectiles: 16, marks: 96, speed: 34, gravity: 3, lifetime: 3, interval: .16 });
-export const PAINTBALL_WEAPONS = Object.freeze([
-  Object.freeze({ id: 'pistol', label: 'Pistola', automatic: false, interval: .16, speed: 34 }),
-  Object.freeze({ id: 'automatic', label: 'Metralhadora', automatic: true, interval: .12, speed: 60 }),
-]);
+export const PAINTBALL_LIMITS = Object.freeze({ projectiles: 48, marks: 96, speed: 34, gravity: 3, lifetime: 3, interval: .15 });
+export const PAINTBALL_WEAPONS = WEAPONS;
 
 /** Exact ballistic integration, independent of the render frame duration. */
 export function advancePaintball(position, velocity, dt, gravity = PAINTBALL_LIMITS.gravity) {
@@ -98,11 +96,17 @@ function splatterGeometry() {
 }
 
 /** Inputs belong to the existing player/UI, so looking by dragging never fires. */
-export function createPaintball({ scene, camera, getActive = () => true, colliderRoots = () => [scene], onShot = () => {}, updateWeaponPose, getShotOrigin }) {
+export function createPaintball({ scene, camera, getActive = () => true, colliderRoots = () => [scene], onShot = () => {}, onAttack = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
   const root = new THREE.Group(); root.name = 'paintball-effects'; root.userData.paintballIgnore = true; scene.add(root);
   const gun = new THREE.Group(); gun.name = 'pistolinha-tinta'; gun.userData.paintballIgnore = true;
   const pistolModel = new THREE.Group(), autoModel = new THREE.Group();
   autoModel.name = 'metralhadora-paintball'; autoModel.visible = false; gun.add(pistolModel, autoModel);
+  const inventory = createWeaponInventory();
+  const weaponParents = { pistol: pistolModel, automatic: autoModel };
+  for (const weapon of WEAPONS.slice(2)) {
+    const parent = new THREE.Group(); parent.name = `arma-${weapon.id}`; parent.visible = false;
+    gun.add(parent); weaponParents[weapon.id] = parent;
+  }
   gun.scale.setScalar(.65);
   gun.position.set(.34, -.34, -.62); camera.add(gun);
   if (!camera.parent) scene.add(camera);
@@ -142,6 +146,14 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   }
   const muzzlePoint = new THREE.Object3D(); muzzlePoint.position.set(0, .012, -.38); gun.add(muzzlePoint);
 
+  // Loading silhouettes are replaced by the supplied models when ready.
+  for (const weapon of WEAPONS.slice(2)) {
+    if (weapon.kind === 'unarmed') continue;
+    const parent = weaponParents[weapon.id], length = weapon.kind === 'firearm' ? .5 : .55;
+    addGun(new THREE.BoxGeometry(.055, .055, length), graphite, [0, 0, -length / 2], parent);
+    addGun(new THREE.BoxGeometry(.065, .06, .07), colors[2].gun, [0, 0, -.16], parent);
+  }
+
   const ballGeometry = keepGeometry(new THREE.SphereGeometry(.075, 8, 6)), markGeometry = keepGeometry(splatterGeometry());
   const projectiles = Array.from({ length: PAINTBALL_LIMITS.projectiles }, () => {
     const mesh = new THREE.Mesh(ballGeometry, colors[2].ball); mesh.name = 'bolinha-tinta'; mesh.visible = false; root.add(mesh);
@@ -152,7 +164,7 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   });
   const raycaster = new THREE.Raycaster(), forward = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3(), shotOrigin = new THREE.Vector3();
   let colorIndex = 2, projectileIndex = 0, markIndex = 0, cooldown = 0, recoil = 0, shots = 0, disposed = false;
-  let weaponIndex = 0, trigger = false, aiming = false, aimBlend = 0;
+  let weaponIndex = 0, trigger = false, aiming = false, aimBlend = 0, attackSequence = 0, pendingAttack = null, pendingShot = null;
   let weaponModels = null;
   const baseFov = camera.fov;
   const restoreView = () => {
@@ -174,7 +186,8 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   const trace = (from, to) => tracePaintMeshes(raycaster, from, to, refreshColliders(), ignored);
 
   function poseWeapon() {
-    if (updateWeaponPose?.(gun, { aimBlend, recoil, weapon: PAINTBALL_WEAPONS[weaponIndex].id, active: !!getActive() })) return;
+    const weapon = PAINTBALL_WEAPONS[weaponIndex];
+    if (updateWeaponPose?.(gun, { aimBlend, recoil, weapon: weapon.id, kind: weapon.kind, active: !!getActive() })) return;
     gun.position.x = Math.min(.34, .32 * camera.aspect) * (1 - aimBlend);
     gun.position.y = -.34 + aimBlend * .27;
     gun.position.z = -.62 + recoil * .045 - aimBlend * .18;
@@ -182,47 +195,87 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   }
 
   function clearEffects() {
-    trigger = false; recoil = 0; cooldown = 0;
+    trigger = false; recoil = 0; cooldown = 0; pendingAttack = pendingShot = null;
     for (const ball of projectiles) ball.mesh.visible = false;
-    for (const mark of marks) mark.visible = false;
+    for (const mark of marks) { mark.visible = false; mark.userData.followObject = null; }
   }
 
   function setColor(value) {
     const index = typeof value === 'number' ? value : PAINTBALL_PALETTE.findIndex(p => p.id === value);
     if (!Number.isInteger(index) || index < 0 || index >= colors.length) throw new RangeError('Cor de tinta inválida');
     colorIndex = index; reservoir.material = hopper.material = colors[index].gun;
+    for (const parent of Object.values(weaponParents)) parent.traverse(object => {
+      if (object.isMesh && colors.some(color => color.gun === object.material)) object.material = colors[index].gun;
+    });
     if (weaponModels) for (const model of Object.values(weaponModels)) model.setColor(PAINTBALL_PALETTE[index].color);
     return PAINTBALL_PALETTE[index];
   }
 
-  function shoot() {
-    if (disposed || !getActive() || cooldown > 0) return false;
+  function emitShot(weapon) {
     camera.updateWorldMatrix(true, true);
     poseWeapon();
     gun.updateWorldMatrix(true, true);
-    camera.getWorldPosition(origin); camera.getWorldDirection(forward); target.copy(origin).addScaledVector(forward, 100);
+    camera.getWorldPosition(origin); camera.getWorldDirection(forward); target.copy(origin).addScaledVector(forward, weapon.range);
     const aim = trace(origin, target); if (aim) target.copy(aim.point);
-    const ball = projectiles[projectileIndex++ % projectiles.length];
-    muzzlePoint.getWorldPosition(ball.mesh.position);
+    const muzzleOrigin = muzzlePoint.getWorldPosition(new THREE.Vector3());
     // Sweep from the player's eye to the muzzle, independently of the chase
     // camera. This also catches a wall beside the reticle at a cover corner.
     if (getShotOrigin) getShotOrigin(shotOrigin); else shotOrigin.copy(origin);
-    const obstruction = trace(shotOrigin, ball.mesh.position);
+    const obstruction = trace(shotOrigin, muzzleOrigin);
     if (obstruction) {
-      ball.mesh.position.copy(obstruction.point).addScaledVector(obstruction.normal, .015);
+      muzzleOrigin.copy(obstruction.point).addScaledVector(obstruction.normal, .015);
       target.copy(obstruction.point);
-    } else if (aim && origin.distanceTo(aim.point) < origin.distanceTo(ball.mesh.position) + .15) {
-      ball.mesh.position.copy(shotOrigin);
+    } else if (aim && origin.distanceTo(aim.point) < origin.distanceTo(muzzleOrigin) + .15) {
+      muzzleOrigin.copy(shotOrigin);
     }
-    const weapon = PAINTBALL_WEAPONS[weaponIndex];
-    ball.velocity.copy(target).sub(ball.mesh.position).normalize().multiplyScalar(weapon.speed);
-    ball.mesh.material = colors[colorIndex].ball; ball.mesh.userData.paintColor = colorIndex; ball.mesh.visible = true; ball.age = 0;
-    cooldown = weapon.interval; recoil = 1; shots++; onShot(weapon.id);
+    const direction = target.clone().sub(muzzleOrigin).normalize();
+    const right = new THREE.Vector3().crossVectors(direction, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, direction).normalize();
+    for (let pellet = 0; pellet < weapon.pellets; pellet++) {
+      const ball = projectiles[projectileIndex++ % projectiles.length]; ball.mesh.position.copy(muzzleOrigin);
+      const spread = weapon.hipSpread && !aiming ? weapon.hipSpread : weapon.spread;
+      // The central pellet follows the reticle, with other pellets distributed
+      // across a disk. One shell is one shot and one sound, even with nine hits.
+      const angle = random() * Math.PI * 2, radius = weapon.pellets > 1 && pellet === 0 ? 0 : Math.sqrt(random()) * spread;
+      ball.velocity.copy(direction).addScaledVector(right, Math.cos(angle) * radius).addScaledVector(up, Math.sin(angle) * radius).normalize().multiplyScalar(weapon.speed);
+      ball.weapon = weapon; ball.distance = 0;
+      ball.mesh.material = colors[colorIndex].ball; ball.mesh.userData.paintColor = colorIndex; ball.mesh.visible = true; ball.age = 0;
+    }
+    recoil = 1; shots++; onShot(weapon.id);
+  }
+
+  function meleeImpact(weapon) {
+    camera.updateWorldMatrix(true, true);
+    camera.getWorldPosition(origin); camera.getWorldDirection(forward);
+    if (getShotOrigin) getShotOrigin(shotOrigin); else shotOrigin.copy(origin);
+    target.copy(origin).addScaledVector(forward, 100);
+    const aim = trace(origin, target); if (aim) target.copy(aim.point);
+    const direction = target.clone().sub(shotOrigin).normalize();
+    const right = new THREE.Vector3().crossVectors(direction, new THREE.Vector3(0, 1, 0)).normalize();
+    let closest = null;
+    // A short swept fan covers the hand/blade width while respecting walls
+    // and the player's reach, independently of the chase camera distance.
+    for (const offset of [0, -.13, .13]) {
+      const end = shotOrigin.clone().addScaledVector(direction, weapon.range).addScaledVector(right, offset);
+      const hit = trace(shotOrigin, end);
+      if (hit && (!closest || hit.distance < closest.distance)) closest = hit;
+    }
+    if (closest) onImpact(closest, { weapon, damage: weapon.damage, impulse: weapon.impulse, direction, kind: weapon.kind });
+  }
+
+  function shoot() {
+    if (disposed || !getActive() || cooldown > 0) return false;
+    const weapon = PAINTBALL_WEAPONS[weaponIndex]; cooldown = weapon.interval;
+    if (weapon.kind !== 'firearm') {
+      recoil = 1; pendingAttack = { weapon, remaining: weapon.interval * .28 };
+      onAttack(weapon, { sequence: attackSequence++ });
+    } else if (weapon.windup) pendingShot = { weapon, remaining: weapon.windup, needsTrigger: trigger };
+    else emitShot(weapon);
     return true;
   }
 
   function setTrigger(pressed) {
-    if (!pressed || disposed || !getActive()) { trigger = false; return; }
+    if (!pressed || disposed || !getActive()) { trigger = false; if (pendingShot?.needsTrigger) pendingShot = null; return; }
     if (trigger) return;
     trigger = true; shoot();
   }
@@ -230,8 +283,10 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   function setWeapon(value) {
     const index = typeof value === 'number' ? value : PAINTBALL_WEAPONS.findIndex(w => w.id === value);
     if (!Number.isInteger(index) || index < 0 || index >= PAINTBALL_WEAPONS.length) throw new RangeError('Arma inválida');
-    trigger = false; weaponIndex = index;
-    pistolModel.visible = index === 0; autoModel.visible = index === 1;
+    inventory.select(PAINTBALL_WEAPONS[index].id);
+    trigger = false; pendingAttack = pendingShot = null; weaponIndex = index;
+    for (const [id, parent] of Object.entries(weaponParents)) parent.visible = id === PAINTBALL_WEAPONS[index].id;
+    if (PAINTBALL_WEAPONS[index].kind !== 'firearm') restoreView();
     const loaded = weaponModels?.[PAINTBALL_WEAPONS[index].id];
     if (loaded) { muzzlePoint.position.copy(loaded.muzzle); gun.userData.weaponGrip = loaded.grip; }
     else muzzlePoint.position.set(0, .012, index === 0 ? -.38 : -.62);
@@ -240,11 +295,13 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
 
   function setWeaponModels(models) {
     weaponModels = models;
-    for (const [id, parent] of [['pistol', pistolModel], ['automatic', autoModel]]) {
+    for (const [id, parent] of Object.entries(weaponParents)) {
+      if (!models[id]) continue;
       parent.clear(); parent.add(models[id].model);
       models[id].model.traverse(object => {
         if (!object.isMesh) return;
-        geometries.add(object.geometry); materials.add(object.material);
+        geometries.add(object.geometry);
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material);
       });
     }
     setColor(colorIndex); setWeapon(weaponIndex);
@@ -255,29 +312,59 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     gun.visible = !!getActive();
     // A narrow horizontal FOV must not put the entire first-person weapon offscreen.
     const elapsed = Math.min(.1, Math.max(0, dt));
+    const cooldownOvershoot = Math.max(0, elapsed - cooldown);
     cooldown = Math.max(0, cooldown - elapsed); recoil *= Math.exp(-elapsed * 16);
-    if (!gun.visible) { trigger = false; restoreView(); poseWeapon(); return; }
+    if (!gun.visible) { trigger = false; pendingAttack = pendingShot = null; restoreView(); poseWeapon(); return; }
+    if (pendingAttack) {
+      pendingAttack.remaining -= elapsed;
+      if (pendingAttack.remaining <= 0) { meleeImpact(pendingAttack.weapon); pendingAttack = null; }
+    }
+    if (pendingShot) {
+      pendingShot.remaining -= elapsed;
+      if (pendingShot.remaining <= 0) { emitShot(pendingShot.weapon); pendingShot = null; }
+    }
     aimBlend += ((aiming ? 1 : 0) - aimBlend) * (1 - Math.exp(-elapsed * 18));
     if (Math.abs(aimBlend - (aiming ? 1 : 0)) < .001) aimBlend = aiming ? 1 : 0;
-    const fov = baseFov + (45 - baseFov) * aimBlend;
+    const fov = baseFov + ((PAINTBALL_WEAPONS[weaponIndex].aimFov || 45) - baseFov) * aimBlend;
     if (Math.abs(camera.fov - fov) > .001) { camera.fov = fov; camera.updateProjectionMatrix(); }
     poseWeapon();
     // At most one shot per rendered frame: a slow frame never releases a burst
     // of catch-up raycasts. Projectile/splat pools remain fixed and shared.
-    if (trigger && PAINTBALL_WEAPONS[weaponIndex].automatic && cooldown === 0) shoot();
+    if (trigger && PAINTBALL_WEAPONS[weaponIndex].automatic && cooldown === 0 && shoot()) {
+      // Preserve the fractional frame so 90 ms fire does not become 100 ms at
+      // 50 Hz. Cap debt to one interval; stalled frames never create bursts.
+      cooldown -= Math.min(cooldownOvershoot, PAINTBALL_WEAPONS[weaponIndex].interval * .5);
+    }
     for (const ball of projectiles) {
       if (!ball.mesh.visible) continue;
       const step = advancePaintball(ball.mesh.position, ball.velocity, elapsed);
       const hit = trace(ball.mesh.position, step.position);
       ball.age += elapsed;
+      ball.distance += ball.mesh.position.distanceTo(step.position);
       if (hit) {
         const mark = marks[markIndex++ % marks.length]; mark.material = colors[ball.mesh.userData.paintColor].paint;
         mark.position.copy(hit.point).addScaledVector(hit.normal, .014);
         mark.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
         mark.rotateZ(markIndex * 2.39996); mark.scale.setScalar(.90 + (markIndex % 5) * .06); mark.visible = true;
+        mark.userData.followObject = null;
+        for (let object = hit.object; object; object = object.parent) {
+          if (!object.userData.dynamicPaint && !object.userData.rigidBody && !object.userData.physicsBody) continue;
+          object.updateWorldMatrix(true, false); mark.updateMatrix();
+          mark.userData.followObject = object;
+          mark.userData.localMark = object.matrixWorld.clone().invert().multiply(mark.matrix);
+          break;
+        }
+        onImpact(hit, { weapon: ball.weapon, damage: ball.weapon.damage, impulse: ball.weapon.impulse, direction: ball.velocity.clone().normalize(), kind: 'firearm' });
         ball.mesh.visible = false;
-      } else if (ball.age >= PAINTBALL_LIMITS.lifetime) ball.mesh.visible = false;
+      } else if (ball.age >= PAINTBALL_LIMITS.lifetime || ball.distance >= ball.weapon.range) ball.mesh.visible = false;
       else { ball.mesh.position.copy(step.position); ball.velocity.copy(step.velocity); }
+    }
+    for (const mark of marks) {
+      const object = mark.userData.followObject;
+      if (!mark.visible || !object) continue;
+      if (!object.parent) { mark.visible = false; continue; }
+      object.updateWorldMatrix(true, false);
+      new THREE.Matrix4().multiplyMatrices(object.matrixWorld, mark.userData.localMark).decompose(mark.position, mark.quaternion, mark.scale);
     }
   }
 
@@ -291,14 +378,18 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   gun.visible = !!getActive();
   return {
     root, gun, update, shoot, setColor, setTrigger, setWeapon, setWeaponModels, clearEffects, palette: PAINTBALL_PALETTE, weapons: PAINTBALL_WEAPONS, dispose,
-    setAiming(value) { aiming = !disposed && !!getActive() && !!value; if (!getActive()) restoreView(); },
-    resetInput() { trigger = false; restoreView(); },
+    pickupWeapon(id) { const result = inventory.pickup(id); setWeapon(id); return result; },
+    get inventory() { return inventory.state; },
+    get availableWeapons() { return inventory.available; },
+    get weaponModels() { return weaponModels; },
+    setAiming(value) { aiming = !disposed && !!getActive() && PAINTBALL_WEAPONS[weaponIndex].kind === 'firearm' && !!value; if (!getActive()) restoreView(); },
+    resetInput() { trigger = false; pendingAttack = pendingShot = null; restoreView(); },
     async warmup(renderer) {
       // Compile pooled effect shaders before the first shot, then restore visibility.
       const visible = gun.visible;
-      gun.visible = true; pistolModel.visible = autoModel.visible = true; projectiles[0].mesh.visible = true; marks[0].visible = true;
+      gun.visible = true; for (const parent of Object.values(weaponParents)) parent.visible = true; projectiles[0].mesh.visible = true; marks[0].visible = true;
       try { await renderer.compileAsync(scene, camera); renderer.render(scene, camera); }
-      finally { gun.visible = visible; pistolModel.visible = weaponIndex === 0; autoModel.visible = weaponIndex === 1; projectiles[0].mesh.visible = false; marks[0].visible = false; }
+      finally { gun.visible = visible; for (const [id, parent] of Object.entries(weaponParents)) parent.visible = id === PAINTBALL_WEAPONS[weaponIndex].id; projectiles[0].mesh.visible = false; marks[0].visible = false; }
     },
     get collisionStats() { return collisionStats; },
     get color() { return PAINTBALL_PALETTE[colorIndex]; },

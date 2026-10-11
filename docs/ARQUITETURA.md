@@ -12,7 +12,7 @@ quebrar o trabalho de quem cuida de outro módulo.
 | `src/map/` | Mapa (mundo real) | relevo SRTM, vias, prédios do OSM, prédios procedurais, vegetação, água, muros, semáforos, placas, destinos do entorno | melhorar ruas, novos tipos de prédio, mais vegetação |
 | `src/campus/` | Campus Cidade de Deus | núcleo do Bradesco: prédios da planta oficial, muros, portarias, estacionamentos, terraplenagem, detalhes, marcos levantados em campo (`landmarks.js`: escadaria, beco, acessos, locomotiva) | novo prédio, fachada, mobiliário do campus |
 | `src/player/` | Personagem | avatar Sato, animações e encaixe de armas; controle em primeira/terceira pessoa, teclado, mouse, toque, colisão, pulo, voo | modelo/avatar, animação, corrida, agachar |
-| `src/gameplay/<mecânica>/` | Jogabilidade | uma pasta por mecânica; hoje `paintball/` (pistola e metralhadora de tinta, gatilho e mira focada) | missões, carros, coletáveis, multiplayer |
+| `src/gameplay/<mecânica>/` | Jogabilidade | `paintball/`: catálogo, inventário, armas de fogo, melee, socos e armas no chão | missões, carros, coletáveis, multiplayer |
 | `src/ui/` | Interface | tela de carregamento, menu, HUD, minimapa, mapa grande, avisos, gestos mobile, CSS | novas telas, configurações, acessibilidade |
 | `src/debug/` | Depuração | `window.__cdd`, vistas de inspeção `?inspect=` | ferramentas de QA |
 | `src/shared/` | Utilitários | funções puras: geometria 2D, aleatoriedade, geometria de vias, texturas procedurais, download de JSON com parsing adiado | — |
@@ -24,7 +24,7 @@ quebrar o trabalho de quem cuida de outro módulo.
 `src/main.js` só **monta** o jogo, nesta ordem:
 
 ```
-menu + intro + downloads → fim da intro apresentado → JSON (map + campus) → core (game) → mapa (+ plugin campus) → lotes → treino → personagem + GLB pronto → tour → tinta/BVH → UI → visual → materiais → debug → menu pronto
+menu + intro + downloads → fim da intro apresentado → JSON (map + campus) → core (game) → mapa (+ plugin campus) → lotes → treino → caixas/Rapier → personagem + GLB pronto → tour → combate/BVH + modelos → armas no chão → UI → visual → materiais → debug → menu pronto
 ```
 
 `createFrontMenu()` expõe `introFinished`, que resolve após a abertura (ou pular/configurações/movimento reduzido) e dois `requestAnimationFrame`, garantindo que a capa final seja apresentada antes do trabalho pesado. `loadMapData(base, { beforeParse })` e `loadCampusData(base, { beforeParse })` baixam o corpo durante a intro e aguardam essa promessa antes de fazer JSON.parse. `main.js` também aguarda explicitamente antes de criar WebGL/PMREM e montar o mundo. Animações CSS não protegem o texto de tarefas longas na thread principal. Depois de carregar, o motor mantém sistemas leves a 15 Hz no menu opaco e pula o desenho da cidade oculta; a renderização normal volta ao iniciar campanha/tour.
@@ -42,6 +42,17 @@ no mundo pelo encaixe da mão direita; retorna se a pose foi aplicada.
 O módulo de paintball conecta o gatilho/mira ao personagem por essa API e expõe
 `setTrigger(bool)`, `setWeapon(id)`, `setAiming(bool)`, `resetInput()` e `clearEffects()`; a UI usa o
 personagem para pulo e voo. Não há imports novos entre módulos.
+
+`weapons.js` mantém o catálogo e a regra de dois slots de fogo, um melee e socos
+sempre disponíveis. `paintball.inventory` retorna `{slots, selected, lastFirearmSlot}`;
+`availableWeapons` contém os três equipamentos e socos. `pickupWeapon(id)` retorna
+`{picked, dropped, slot}`; armas de fogo substituem o slot de fogo selecionado ou o
+último usado, e melee substitui apenas o slot 3. `pickups.js` cria as cópias no chão,
+detecta proximidade e coloca o item descartado no lugar do coletado. A UI usa
+`game.weaponPickups.nearby` e `pickup()`, e implementa a roda por segurar/arrastar/soltar
+em `ui/weapon-wheel.js`. `game.ui.weaponWheelOpen` bloqueia tiros e mira durante a escolha.
+Os slots aparecem somente na roda enquanto o botão está pressionado; não há
+inventário permanente no HUD.
 
 `player/avatar.js` mantém um único modelo, esqueleto e materiais para as duas vistas.
 Na primeira pessoa oculta cabeça, tronco e pernas, e gira o rig em torno dos olhos;
@@ -63,12 +74,20 @@ Na primeira pessoa os ombros ficam atrás do plano próximo da câmera, e o recu
 aditivo tem peso reduzido para manter o retículo visível. O scroll no canvas ativo
 seleciona primeira pessoa para cima e terceira para baixo, sem interferir no mapa/tour.
 
-A postura de mira compensa a rotação do quadril na primeira vértebra e mantém
-yaw/roll da arma estáveis ao andar ou disparar, movendo a cadeia inteira de braços.
-A locomoção usa `Jog_Fwd_Loop` e `Sprint_Loop` com playback proporcional à velocidade
-real (velocidades de contato dos pés medidas: 4,588 e 7,015 m/s no tamanho do jogo).
-`player/hair.js` aplica uma leve inclinação das pontas/franja em geometria clonada,
-sem reexportar o GLB. A classe `body.playing`, vinculada a lock/unlock do jogador,
+A postura de mira compensa a rotação do quadril na primeira vértebra e acrescenta
+um balanço sutil durante a corrida, movendo a cadeia inteira de braços.
+A intensidade do analógico escolhe continuamente caminhada, trote ou corrida em
+qualquer direção. `Walk_Loop`, `Jog_Fwd_Loop` e `Sprint_Loop` acompanham a velocidade
+real e a fase compartilhada `player.locomotion`. Eventos `footstep`, `jump` e `land`
+disparam sons de grama/concreto por `core/locomotion-audio.js`, sem passos parado,
+contra obstáculos ou durante o voo. `avatar.playAttack(def, {sequence})` usa
+`Sword_Attack` para melee e alterna `Punch_Jab`/`Punch_Cross` para socos.
+Na primeira pessoa, melee usa a guarda frontal original de pistola como base
+e o movimento aditivo dos braços de espada, com amplitude reduzida e ombros
+fora do enquadramento. Machado e bastão inclinam para frente para exibir a ponta.
+A terceira pessoa conserva a pose e o golpe de espada completos.
+`player/hair.js` joga pontas e franja para a esquerda do personagem (+X no GLB),
+preservando a nuca e o asset original. A classe `body.playing`, vinculada a lock/unlock do jogador,
 oculta o cursor no jogo e restaura o cursor ao abrir menus/mapa.
 
 `core/training.js` expõe `start()`, `stop()`, `active`, `floor`, `terrain`, `bounds`
@@ -77,14 +96,23 @@ O modo `training` oculta a cidade e usa uma área plana isolada; `player/index.j
 seleciona essas consultas enquanto o treino está ativo e desativa o voo. A saída
 restaura visibilidade, atmosfera, câmera e posição anteriores. A UI emite
 `modechange` ao entrar ou sair dos modos; paintball limpa gatilho, mira, projéteis
-e marcas de tinta. Durante o treino, seus raios consultam apenas o piso de treino.
+e marcas de tinta. Durante o treino, seus raios consultam o piso e a caixa ativa.
+
+`core/dynamic-props.js` inicializa Rapier por importação assíncrona e cria duas caixas
+de madeira, uma por espaço. O mundo usa passo fixo de 1/60 s, piso de treino e uma
+malha amostrada do terreno do campo; só a caixa do espaço ativo participa. O personagem
+compõe consultas de colisão e topo da caixa com os pisos existentes. `onImpact(hit, info)`
+aplica impulso no ponto atingido e registra dano; marcas de tinta acompanham a caixa.
+Golpes de melee e socos usam um alcance curto a partir dos olhos e nunca criam tinta.
 
 | Campo | O que é | Quem preenche / usa |
 |---|---|---|
-| `game.audio` | `unlock`, `setPreferences`, `setMenu`, `setHidden`, `ui`, `shot`, `dispose`: um AudioContext criado no primeiro gesto, música só nos menus e vozes limitadas | menu cria antes dos dados; core compartilha; UI e paintball usam |
+| `game.audio` | música, UI, tiros, passos, pulo/pouso e golpes: AudioContext criado no primeiro gesto, vozes limitadas | menu cria antes dos dados; core compartilha; UI e paintball usam |
 | `game.engine` | `scene`, `camera`, `renderer`, `sun`, `addSystem(fn, fase)`, `setShadowFocus(fn)` | core; todos usam |
 | `game.physics` | obstáculos, pisos e telhados (`addCollider`, `addSurface`, `addRoof`) e consultas (`collide`, `surfaceHeightAt`, `roofAt`) | mapa e campus **registram**; personagem **consulta** |
 | `game.training` | espaço quadriculado isolado e consultas físicas próprias; restaura o estado da cidade ao sair | core cria antes do avatar; UI inicia/encerra; player e paintball consultam |
+| `game.dynamicProps` | caixas Rapier, `root`, `impact`, consultas de colisão/topo | core cria antes do avatar; player e paintball usam |
+| `game.weaponPickups` | armas no chão, `nearby`, `pickup` e reposição do item descartado | gameplay cria antes da UI |
 | `game.mode`, `game.tour`, `game.mapPoints`, `game.settings` | modo ativo, câmera independente, destinos numerados e escolhas persistentes | main, core, campus, UI |
 | `game.places` | destinos de teletransporte `{ name, x, z, yaw }` | campus e mapa adicionam; UI e personagem leem |
 | `game.input` | `bind('KeyP', fn, { when: 'playing' \| 'always', label })` | cada módulo registra as próprias teclas |

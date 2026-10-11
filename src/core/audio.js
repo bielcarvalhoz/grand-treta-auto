@@ -98,9 +98,40 @@ export function createAudio({ music = true, effects = true, contextFactory = () 
     },
     shot(weapon = 'pistol') {
       if (!audible()) return;
-      const now = context.currentTime, automatic = weapon === 'automatic';
-      note(automatic ? 190 : 150,.09,.24,effectsBus,now,'sine',55);
-      noise(automatic ? .045 : .07,.33,effectsBus,now,1300+ rnd()*500);
+      const now = context.currentTime;
+      const [pitch, duration, volume] = ({ automatic: [190,.045,.30], smg: [220,.035,.25], revolver: [115,.11,.38], shotgun: [85,.17,.42], sniper: [100,.21,.4] })[weapon] || [150,.07,.33];
+      note(pitch,.09,volume * .73,effectsBus,now,'sine',55);
+      noise(duration,volume,effectsBus,now,1300+ rnd()*500);
+    },
+    footstep(surface = 'concrete', { speed = 3, foot = 0 } = {}) {
+      if (!audible()) return;
+      const now = context.currentTime, grass = surface === 'grass';
+      const volume = Math.min(.18, .065 + speed * .01) * (foot ? .96 : 1);
+      note(grass ? 95 : 165,grass ? .065 : .045,volume,effectsBus,now,'sine',grass ? 45 : 70);
+      noise(grass ? .13 : .05,volume * (grass ? 1.15 : .85),effectsBus,now,grass ? 850 + rnd() * 400 : 2400 + rnd() * 600,grass ? 'lowpass' : 'bandpass');
+    },
+    jump(surface = 'concrete') {
+      if (!audible()) return;
+      const now = context.currentTime;
+      note(125,.08,.11,effectsBus,now,'sine',190);
+      noise(.14,.08,effectsBus,now,surface === 'grass' ? 800 : 1700,'lowpass');
+    },
+    land(surface = 'concrete', speed = 4) {
+      if (!audible()) return;
+      const now = context.currentTime, strength = Math.min(.27, .09 + Math.abs(speed) * .014);
+      note(100,.12,strength,effectsBus,now,'sine',38);
+      noise(surface === 'grass' ? .16 : .075,strength * .75,effectsBus,now,surface === 'grass' ? 900 : 2100);
+    },
+    melee(weapon = {}) {
+      if (!audible()) return;
+      const now = context.currentTime, fists = weapon.id === 'fists' || weapon.kind === 'unarmed';
+      noise(fists ? .09 : .16,.12,effectsBus,now,fists ? 850 : 1600,'lowpass');
+    },
+    impact(surface = 'wood', impulse = 6) {
+      if (!audible()) return;
+      const now = context.currentTime, volume = Math.min(.26, .07 + impulse * .007);
+      note(surface === 'wood' ? 145 : 210,.085,volume,effectsBus,now,'triangle',65);
+      noise(.07,volume * .65,effectsBus,now,700 + rnd() * 300);
     },
     get preferences() { return {...preferences}; },
     get state() { return { unlocked, running: context?.state === 'running', musicPlaying: clock !== null, voices: voices.size }; },

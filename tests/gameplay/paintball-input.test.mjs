@@ -27,6 +27,12 @@ test('right/left mouse button chords aim and fire independently, ignoring touch 
     for(let i=0;i<20;i++)system(.05);assert.ok(paint.stats.shots>1);
     send(window,'mouseup',0);assert.equal(paint.firing,false);assert.equal(paint.aiming,true);
     send(window,'mouseup',2);assert.equal(paint.aiming,false);assert.equal(focused,false);
+    send(canvas,'mousedown',0);game.ui={weaponWheelOpen:true};game.events.emit('weaponwheel',true);
+    const wheelShots=paint.stats.shots;assert.equal(paint.firing,false);
+    send(canvas,'mousedown',0);send(canvas,'mousedown',2);for(let i=0;i<20;i++)system(.05);
+    assert.equal(paint.stats.shots,wheelShots,'wheel blocks mouse attacks and cancels the previous hold');assert.equal(paint.aiming,false);
+    game.ui.weaponWheelOpen=false;game.events.emit('weaponwheel',false);send(window,'mouseup',0);
+    system(.1);assert.equal(paint.stats.shots,wheelShots,'release after closing the wheel never fires');
     document.pointerLockElement=null;send(canvas,'mousedown',0);assert.equal(paint.firing,true,'automatic hold also works without pointer lock');
     send(window,'mouseup',0);assert.equal(paint.firing,false);
     const shots=paint.stats.shots;player.touchMode=true;

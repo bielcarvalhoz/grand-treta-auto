@@ -17,9 +17,12 @@ export function createPlayerModule(game) {
   const player = createPlayer(engine.camera, engine.renderer.domElement, {
     terrain: { heightAt: (x, z) => (training()?.terrain || map.terrain).heightAt(x, z) },
     bounds: () => training()?.bounds || map.terrain.bounds,
-    bridgeHeightAt: (x, z, maxY) => (training() || physics).surfaceHeightAt(x, z, maxY),
-    collide: (x, z, r, feetY) => (training() || physics).collide(x, z, r, feetY),
-    roofAt: (x, z, y) => (training() || physics).roofAt(x, z, y),
+    bridgeHeightAt: (x, z, maxY) => Math.max((training() || physics).surfaceHeightAt(x, z, maxY), game.dynamicProps?.surfaceHeightAt(x, z, maxY) ?? -Infinity),
+    collide: (x, z, r, feetY, options) => {
+      const [nx, nz] = (training() || physics).collide(x, z, r, feetY, options);
+      return game.dynamicProps?.collide(nx, nz, r, feetY, options) || [nx, nz];
+    },
+    roofAt: (x, z, y) => Math.max((training() || physics).roofAt(x, z, y), game.dynamicProps?.roofAt(x, z, y) ?? -Infinity),
     allowFlight: () => !training(),
   });
   const spawn = game.places[0] || { x: 0, z: 0, yaw: 0 };

@@ -49,3 +49,13 @@ test('unsupported audio is a harmless fallback',async()=>{
   const audio=createAudio({contextFactory:()=>null});assert.equal(await audio.unlock(),false);
   audio.ui();audio.shot();audio.setPreferences({effects:false});await audio.setHidden(true);audio.dispose();
 });
+
+test('movement and melee effects obey mute and keep voice allocations bounded', async () => {
+  const f = fixture({ music: false }); await f.audio.unlock();
+  f.audio.footstep('grass', { speed: 2 }); f.audio.footstep('concrete', { speed: 8 });
+  f.audio.jump('grass'); f.audio.land('concrete', 7); f.audio.melee({ id: 'fists' }); f.audio.impact('wood', 12);
+  assert.ok(f.sources.length >= 10); assert.ok(f.audio.state.voices <= 12);
+  f.audio.setPreferences({ effects: false }); const count = f.sources.length;
+  f.audio.footstep(); f.audio.jump(); f.audio.land(); f.audio.melee(); f.audio.impact();
+  assert.equal(f.sources.length, count); assert.equal(f.audio.state.voices, 0); f.audio.dispose();
+});

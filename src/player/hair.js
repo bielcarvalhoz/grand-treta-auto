@@ -8,10 +8,15 @@ export function sweepHairTips(meshes) {
     const positions = mesh.geometry.attributes.position;
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
-      const tip = MathUtils.smoothstep(y, .86, 1.012) * (.4 + .6 * MathUtils.smoothstep(z, -.06, .08));
-      const fringe = MathUtils.smoothstep(z, .065, .11) * (1 - MathUtils.smoothstep(y, .82, .90));
-      const fringeTip = .5 + .5 * Math.sin((x + .08) * 90);
-      positions.setXYZ(i, x + .022 * tip + .010 * fringe, y - .022 * tip - .006 * fringe * fringeTip, z + .004 * fringe);
+      // +X is Sato's LEFT (the original DEF-handL is on +X). Leave the
+      // lower/back hair at the nape intact, and comb crown/front tips together.
+      const front = MathUtils.smoothstep(z, .015, .095);
+      const top = MathUtils.smoothstep(y, .865, 1.005);
+      const fringe = front * MathUtils.smoothstep(y, .785, .86) * (1 - MathUtils.smoothstep(y, .89, .96));
+      const tip = top * (.30 + .70 * front);
+      const tousle = .80 + .20 * Math.sin(x * 93 + z * 47);
+      const sweep = (.050 * tip + .031 * fringe) * tousle;
+      positions.setXYZ(i, x + sweep, y - .020 * tip - .008 * fringe * tousle, z + .005 * fringe - .004 * tip);
     }
     positions.needsUpdate = true;
     mesh.geometry.computeVertexNormals(); mesh.geometry.computeBoundingBox(); mesh.geometry.computeBoundingSphere();

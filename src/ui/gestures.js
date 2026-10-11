@@ -11,7 +11,7 @@ export function installGestureGuard(target = document) {
   const taps = new Map(); let lastAction = null;
   target.addEventListener('pointerdown', e => {
     if (!['touch', 'pen'].includes(e.pointerType)) return;
-    const button = e.target?.closest?.('#hud button:not(#btn-fire), #minimap, #map-panel button');
+    const button = e.target?.closest?.('#hud button:not(#btn-fire):not(#btn-weapon), #minimap, #map-panel button');
     if (button && !button.disabled) taps.set(e.pointerId, { button, x: e.clientX, y: e.clientY, moved: false });
   }, true);
   target.addEventListener('pointermove', e => {
