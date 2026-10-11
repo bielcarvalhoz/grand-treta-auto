@@ -12,15 +12,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
 
 const DEPENDENCIAS = {
-  app: ['core', 'map', 'campus', 'player', 'gameplay/paintball', 'ui', 'debug', 'shared'],
+  app: ['core', 'map', 'campus', 'player', 'gameplay/paintball', 'gameplay/combat', 'ui', 'debug', 'shared'],
   shared: [],
   core: ['shared'],
   map: ['core', 'shared'],
   campus: ['map', 'core', 'shared'],
   player: ['core', 'shared'],
   'gameplay/paintball': ['player', 'map', 'core', 'shared'],
+  'gameplay/combat': ['player', 'map', 'core', 'shared'],
   ui: ['core', 'shared'],
-  debug: ['core', 'map', 'campus', 'player', 'gameplay/paintball', 'ui', 'shared'],
+  debug: ['core', 'map', 'campus', 'player', 'gameplay/paintball', 'gameplay/combat', 'ui', 'shared'],
 };
 
 const moduleOf = (abs) => {

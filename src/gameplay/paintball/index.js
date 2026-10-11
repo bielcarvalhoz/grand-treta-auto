@@ -11,16 +11,17 @@ export function createPaintballModule(game) {
   const { scene, camera, renderer } = game.engine;
   const $ = (id) => document.getElementById(id);
   const player = game.player;
-  const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen && !game.ui?.weaponWheelOpen;
+  const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen && !game.ui?.weaponWheelOpen && !game.ui?.combatHUD?.panelOpen && (game.combat?.canPlayerAct ?? true);
   const paintball = createPaintball({
     scene, camera, getActive: paintEnabled,
     getCameraMode: () => player.cameraMode,
-    colliderRoots: () => game.training?.active ? [game.training.floor, game.dynamicProps?.root].filter(Boolean) : [scene],
+    colliderRoots: () => game.training?.active ? [game.training.floor, game.training.root, game.dynamicProps?.root].filter(Boolean) : [scene],
+    traceActors: (from, to) => game.combat?.raycast(from, to),
     updateWeaponPose: (gun, state) => player.updateWeapon?.(gun, state),
     getShotOrigin: target => player.getShotOrigin ? player.getShotOrigin(target) : camera.getWorldPosition(target),
     onShot: (weapon, recoil) => { game.audio?.shot(weapon); player.avatar?.playShot(recoil?.recoilStrength); },
     onAttack: (weapon, state) => { game.audio?.melee?.(weapon); player.avatar?.playAttack?.(weapon, state); },
-    onImpact: (hit, info) => game.dynamicProps?.impact(hit, info),
+    onImpact: (hit, info) => { if (!game.combat?.impact(hit, info)) game.dynamicProps?.impact(hit, info); },
   });
   game.events.on('modechange', () => { paintball.resetInput(); paintball.clearEffects(); });
 
@@ -45,12 +46,14 @@ export function createPaintballModule(game) {
   const nextPaintColor = () => { paintball.setColor((paintball.colorIndex + 1) % paintball.palette.length); syncPaintColor(); };
   $('btn-color').addEventListener('click', nextPaintColor);
   const setTrigger = pressed => {
+    if (pressed && game.combat?.trainingLab.interact()) return;
     paintball.setTrigger(pressed);
     $('btn-fire').classList.toggle('firing', paintball.firing);
   };
   player.bindFireButton($('btn-fire'), setTrigger);
   // Keyboard/screen-reader activation has no pointer gesture to hold.
-  $('btn-fire').addEventListener('click', e => { if (e.detail === 0) paintball.shoot(); });
+  const shootOrInteract = () => { if (!game.combat?.trainingLab.interact()) paintball.shoot(); };
+  $('btn-fire').addEventListener('click', e => { if (e.detail === 0) shootOrInteract(); });
   const setAiming = value => {
     paintball.setAiming(value); player.setFocusedAim(paintball.aiming);
     document.body.classList.toggle('aiming', paintball.aiming);
@@ -82,7 +85,7 @@ export function createPaintballModule(game) {
     if (!paintPointer || e.button !== 0) return;
     const click = !paintPointer.dragged && e.target === renderer.domElement;
     paintPointer = null;
-    if (click && paintEnabled()) paintball.shoot();
+    if (click && paintEnabled()) shootOrInteract();
   });
   const clearPaintPointer = () => {
     paintPointer = null; mouseHeld = false; setTrigger(false); setAiming(false); paintball.resetInput();

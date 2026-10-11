@@ -20,10 +20,12 @@ export function createPlayerModule(game) {
     bridgeHeightAt: (x, z, maxY) => Math.max((training() || physics).surfaceHeightAt(x, z, maxY), game.dynamicProps?.surfaceHeightAt(x, z, maxY) ?? -Infinity),
     collide: (x, z, r, feetY, options) => {
       const [nx, nz] = (training() || physics).collide(x, z, r, feetY, options);
-      return game.dynamicProps?.collide(nx, nz, r, feetY, options) || [nx, nz];
+      const [dx, dz] = game.dynamicProps?.collide(nx, nz, r, feetY, options) || [nx, nz];
+      return game.combat?.collide(dx, dz, r, feetY) || [dx, dz];
     },
     roofAt: (x, z, y) => Math.max((training() || physics).roofAt(x, z, y), game.dynamicProps?.roofAt(x, z, y) ?? -Infinity),
     allowFlight: () => !training(),
+    canAct: () => (game.combat?.canPlayerAct ?? true) && !game.ui?.combatHUD?.panelOpen,
   });
   const spawn = game.places[0] || { x: 0, z: 0, yaw: 0 };
   player.placeAt(spawn.x, spawn.z, spawn.yaw);

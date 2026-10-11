@@ -6,6 +6,7 @@ import { installGestureGuard } from './gestures.js';
 import { createWeaponWheel } from './weapon-wheel.js';
 import { createSniperScope } from './sniper-scope.js';
 import { createTrainingPosePanel } from './training-pose.js';
+import { createCombatHUD } from './combat-hud.js';
 import './style.css';
 
 export { loading, createFrontMenu } from './front-menu.js';
@@ -27,6 +28,7 @@ export function createUI(game) {
   const weaponWheel = createWeaponWheel(game);
   const sniperScope = createSniperScope(game);
   const posePanel = game.debug.trainingOnly ? createTrainingPosePanel(game) : null;
+  const combatHUD = createCombatHUD(game);
 
   const toast = msg => {
     const el = $('toast'); el.textContent = msg; el.classList.add('show');
@@ -47,7 +49,7 @@ export function createUI(game) {
     if (touch) document.body.classList.add('touch');
     document.body.classList.toggle('flying', player.fly);
     $('btn-fly').setAttribute('aria-pressed', String(player.fly));
-    help.textContent = `WASD andar · Shift correr · Espaço pular · C agachar · Z desarmar · Segurar: atacar · Segure Q: armas · E pegar · V tinta · X câmera${mode === 'training' ? '' : ' · F voar · M mapa'} · H esconder`;
+    help.textContent = `WASD andar · Shift correr · Espaço pular · C agachar · Z desarmar · Segurar: atacar · Segure Q: armas · E pegar / acionar · V tinta · X câmera${mode === 'training' ? ' · J laboratório · G marcar ponto' : ' · F voar · M mapa'} · H esconder`;
     game.events.emit('modechange', mode);
     player.start(touch);
   }
@@ -277,5 +279,5 @@ export function createUI(game) {
     updateOrientation();
     if (tour.active) tour.setViewportInset(innerHeight - $('tour-panel').getBoundingClientRect().top + 12);
   });
-  return { toast, hud, posePanel, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); }, get weaponWheelOpen() { return weaponWheel.open; } };
+  return { toast, hud, posePanel, combatHUD, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); }, get weaponWheelOpen() { return weaponWheel.open; } };
 }

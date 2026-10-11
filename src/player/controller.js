@@ -16,7 +16,7 @@ const GRAVITY = 22;
 const STEP_UP = 0.7;
 const TOUCH_FLY_SPEED = 16; // m/s
 
-export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, roofAt, bounds, allowFlight = () => true }) {
+export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, roofAt, bounds, allowFlight = () => true, canAct = () => true }) {
   const controls = new PointerLockControls(camera, dom);
   const keys = new Set();
   const feet = new THREE.Vector3();
@@ -119,7 +119,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   }
 
   function jump() {
-    if (!active || weaponWheelOpen || fly || autoFly || !onGround) return false;
+    if (!active || !canAct() || weaponWheelOpen || fly || autoFly || !onGround) return false;
     vy = 7; onGround = false;
     events.dispatchEvent(new CustomEvent('jump', { detail: { position: feet.clone() } }));
     return true;
@@ -196,7 +196,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3();
 
   function update(dt) {
-    if (!active) { velocity.set(0, 0, 0); locomotion.speed = locomotion.distance = 0; locomotion.gait = 'idle'; return; }
+    if (!active || !canAct()) { velocity.set(0, 0, 0); locomotion.speed = locomotion.distance = 0; locomotion.gait = 'idle'; return; }
     dt = Math.min(dt, 0.05);
     const before = feet.clone();
     const wasGrounded = onGround, fallSpeed = Math.max(0, -vy);

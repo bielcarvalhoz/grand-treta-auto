@@ -81,7 +81,7 @@ function tracePaintMeshes(raycaster, from, to, meshes, ignored) {
 }
 
 /** Inputs belong to the existing player/UI, so looking by dragging never fires. */
-export function createPaintball({ scene, camera, getActive = () => true, getCameraMode = () => 'first', colliderRoots = () => [scene], onShot = () => {}, onAttack = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
+export function createPaintball({ scene, camera, getActive = () => true, getCameraMode = () => 'first', colliderRoots = () => [scene], traceActors = () => null, onShot = () => {}, onAttack = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
   const root = new THREE.Group(); root.name = 'paintball-effects'; root.userData.paintballIgnore = true; scene.add(root);
   const gun = new THREE.Group(); gun.name = 'pistolinha-tinta'; gun.userData.paintballIgnore = true;
   const pistolModel = new THREE.Group(), autoModel = new THREE.Group();
@@ -170,7 +170,10 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
   };
   // Enumerate and build BVHs before gameplay so the first click never builds them.
   refreshColliders();
-  const trace = (from, to) => tracePaintMeshes(raycaster, from, to, refreshColliders(), ignored);
+  const trace = (from, to) => {
+    const scenery = tracePaintMeshes(raycaster, from, to, refreshColliders(), ignored), actor = traceActors(from, to);
+    return actor && (!scenery || actor.distance < scenery.distance) ? actor : scenery;
+  };
 
   function poseWeapon() {
     const weapon = PAINTBALL_WEAPONS[weaponIndex];
@@ -351,6 +354,8 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
       ball.age += elapsed;
       ball.distance += ball.mesh.position.distanceTo(step.position);
       if (hit) {
+        onImpact(hit, { weapon: ball.weapon, damage: ball.weapon.damage, impulse: ball.weapon.impulse, direction: ball.velocity.clone().normalize(), kind: 'firearm' });
+        if (hit.entity) { ball.mesh.visible = false; continue; }
         const mark = marks[markIndex++ % marks.length]; mark.material = colors[ball.mesh.userData.paintColor].paint;
         const projection = projectSurfacePaint(hit, refreshColliders(), mark.geometry, markIndex);
         mark.position.copy(projection.origin); mark.quaternion.identity(); mark.scale.setScalar(1);
@@ -366,7 +371,6 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
           mark.userData.localMark = object.matrixWorld.clone().invert().multiply(mark.matrix);
           break;
         }
-        onImpact(hit, { weapon: ball.weapon, damage: ball.weapon.damage, impulse: ball.weapon.impulse, direction: ball.velocity.clone().normalize(), kind: 'firearm' });
         ball.mesh.visible = false;
       } else if (ball.age >= PAINTBALL_LIMITS.lifetime || ball.distance >= ball.weapon.range) ball.mesh.visible = false;
       else { ball.mesh.position.copy(step.position); ball.velocity.copy(step.velocity); }
