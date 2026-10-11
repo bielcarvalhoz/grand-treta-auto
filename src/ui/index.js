@@ -17,7 +17,7 @@ export function applyDeviceClasses() {
 }
 
 export function createUI(game) {
-  const { map, player, engine, tour } = game;
+  const { map, player, engine, tour, training } = game;
   const overlay = $('overlay'), mapPanel = $('map-panel'), help = $('help');
   const points = game.mapPoints, places = game.places;
   let touchSession = IS_TOUCH;
@@ -28,23 +28,32 @@ export function createUI(game) {
   };
   game.events.on('toast', toast);
 
-  function startCampaign(touch = touchSession) {
+  const walkingMode = () => game.mode === 'campaign' || game.mode === 'training';
+  function startWalking(mode, touch = touchSession) {
     game.audio?.setMenu(false);
-    touchSession = touch; tour.stop(); game.mode = 'campaign';
+    touchSession = touch; tour.stop();
+    if (mode === 'training') training.start(); else training.stop();
+    game.mode = mode;
     document.body.classList.remove('menu-open', 'tour-active');
+    document.body.classList.toggle('training-active', mode === 'training');
     $('tour-panel').classList.add('hidden'); $('tour-markers').classList.add('hidden');
     overlay.classList.add('hidden'); mapPanel.classList.remove('open'); $('hud').classList.remove('hidden');
     if (touch) document.body.classList.add('touch');
     document.body.classList.toggle('flying', player.fly);
     $('btn-fly').setAttribute('aria-pressed', String(player.fly));
-    if (game.mode === 'campaign') player.start(touch);
+    help.textContent = `WASD andar · Shift correr · Espaço pular · Segurar: tiro · Q arma · X câmera${mode === 'training' ? '' : ' · F voar · M mapa'} · H esconder`;
+    game.events.emit('modechange', mode);
+    player.start(touch);
   }
 
+  function startCampaign(touch = touchSession) { startWalking('campaign', touch); }
+
   function startMode(mode, touch = IS_TOUCH) {
-    if (mode === 'campaign') { startCampaign(touch); return; }
+    if (mode === 'campaign' || mode === 'training') { startWalking(mode, touch); return; }
     game.audio?.setMenu(false);
-    game.mode = 'tour'; player.stop(); tour.start(); touchSession = touch;
-    document.body.classList.remove('menu-open'); document.body.classList.add('tour-active');
+    game.mode = 'tour'; player.stop(); training.stop(); tour.start(); touchSession = touch;
+    game.events.emit('modechange', 'tour');
+    document.body.classList.remove('menu-open', 'training-active', 'flying'); document.body.classList.add('tour-active');
     overlay.classList.add('hidden'); mapPanel.classList.remove('open'); $('hud').classList.remove('hidden');
     $('tour-panel').classList.remove('hidden'); $('tour-markers').classList.remove('hidden');
     tour.setViewportInset(innerHeight - $('tour-panel').getBoundingClientRect().top + 12);
@@ -53,13 +62,15 @@ export function createUI(game) {
 
   function showMenu() {
     game.audio?.setMenu(true);
-    game.mode = null; player.stop(); tour.stop();
-    document.body.classList.add('menu-open'); document.body.classList.remove('tour-active', 'flying');
+    game.mode = null; player.stop(); tour.stop(); training.stop();
+    game.events.emit('modechange', null);
+    document.body.classList.add('menu-open'); document.body.classList.remove('tour-active', 'training-active', 'flying');
     mapPanel.classList.remove('open'); overlay.classList.remove('hidden'); $('hud').classList.add('hidden');
     $('tour-panel').classList.add('hidden'); $('tour-markers').classList.add('hidden');
   }
 
   function selectPoint(point, world) {
+    if (game.mode === 'training') return;
     if (game.mode === 'tour') {
       if (!point && world) {
         point = points.reduce((best, p) => !best || Math.hypot(p.x - world[0], p.z - world[1]) < Math.hypot(best.x - world[0], best.z - world[1]) ? p : best, null);
@@ -78,8 +89,28 @@ export function createUI(game) {
     footprints: map.footprints, quarter: map.world.quarter, proj: map.proj, terrain: map.terrain,
     streetAt: map.roads.streetAt, places: points, onSelect: selectPoint, getMode: () => game.mode });
   engine.addSystem((dt, t) => {
-    if (game.mode) hud.update(t, dt, tour.active ? engine.camera.position : player.feet, player.yaw, player.fly);
+    if (game.mode && game.mode !== 'training') hud.update(t, dt, tour.active ? engine.camera.position : player.feet, player.yaw, player.fly);
   }, 'late');
+
+  function syncCameraMode() {
+    const third = player.cameraMode === 'third';
+    $('camera-mode').value = player.cameraMode;
+    $('btn-camera').setAttribute('aria-pressed', String(third));
+    $('btn-camera').setAttribute('aria-label', `Câmera em ${third ? 'terceira' : 'primeira'} pessoa. Alternar câmera`);
+    $('camera-label').textContent = third ? '3ª pessoa' : '1ª pessoa';
+  }
+  function toggleCamera() {
+    if (!walkingMode()) return;
+    player.toggleCameraMode();
+    syncCameraMode();
+    toast(`Câmera: ${player.cameraMode === 'third' ? 'terceira' : 'primeira'} pessoa`);
+  }
+  $('camera-mode').addEventListener('change', () => { player.setCameraMode($('camera-mode').value); syncCameraMode(); });
+  $('btn-camera').addEventListener('click', toggleCamera);
+  player.events.addEventListener('cameramode', syncCameraMode);
+  player.setCameraMode($('camera-mode').value);
+  syncCameraMode();
+  game.input.bind('KeyX', toggleCamera, { label: 'primeira / terceira pessoa' });
 
   const c = game.campus?.stats;
   $('stat-line').textContent = `${c ? `${c.buildings} estruturas · ${c.trees} árvores · ` : ''}Entorno ${map.surroundingsEnabled ? 'ativado' : 'desabilitado'} · Gráfico ${game.quality.name.toUpperCase()}`;
@@ -93,7 +124,7 @@ export function createUI(game) {
   places.forEach((p, i) => {
     const item = document.createElement('li'); $('places-list').appendChild(item);
     placeButton(p, i, item).addEventListener('click', () => {
-      tour.stop(); player.placeAt(p.x, p.z, p.yaw); startCampaign(touchSession); toast(`Teletransportado: ${p.name}`);
+      tour.stop(); training.stop(); player.placeAt(p.x, p.z, p.yaw); startCampaign(touchSession); toast(`Teletransportado: ${p.name}`);
     });
   });
   const markerPositions = [], projection = new THREE.Vector3();
@@ -148,12 +179,12 @@ export function createUI(game) {
   $('btn-menu').addEventListener('click', showMenu);
 
   player.events.addEventListener('lock', e => {
-    if (game.mode !== 'campaign') { player.stop(); return; }
+    if (!walkingMode()) { player.stop(); return; }
     overlay.classList.add('hidden');
     if (e.detail.touch) toast('Esquerda: andar · Direita: mirar');
     else if (e.detail.dragMode) toast('Segure e arraste para olhar · clique para atirar');
   });
-  player.events.addEventListener('unlock', () => { if (game.mode === 'campaign' && !mapPanel.classList.contains('open')) showMenu(); });
+  player.events.addEventListener('unlock', () => { if (walkingMode() && !mapPanel.classList.contains('open')) showMenu(); });
   player.events.addEventListener('fly', e => {
     document.body.classList.toggle('flying', e.detail.flying);
     $('btn-fly').setAttribute('aria-pressed', String(e.detail.flying));
@@ -164,7 +195,7 @@ export function createUI(game) {
     el.style.left = `${s.originX}px`; el.style.top = `${s.originY}px`;
     el.firstElementChild.style.transform = `translate(${s.dx}px, ${s.dy}px)`;
   });
-  $('btn-fly').addEventListener('click', () => { if (player.active) player.toggleAutoFly(); });
+  $('btn-fly').addEventListener('click', () => { if (player.active && game.mode !== 'training') player.toggleAutoFly(); });
   $('btn-jump').addEventListener('click', () => player.jump());
   $('btn-orientation').addEventListener('click', async () => {
     const desired = innerHeight > innerWidth ? 'landscape' : 'portrait';
@@ -176,7 +207,7 @@ export function createUI(game) {
   });
 
   function openMap() {
-    if (!game.mode) return;
+    if (!game.mode || game.mode === 'training') return;
     game.audio?.setMenu(true);
     mapPanel.classList.add('open'); overlay.classList.add('hidden'); player.stop();
     tour.controls.enabled = false;
@@ -200,7 +231,7 @@ export function createUI(game) {
   game.input.bind('KeyH', () => help.classList.toggle('hidden'), { label: 'esconder ajuda' });
   for (let n = 1; n <= 9; n++) {
     const go = () => {
-      if (!game.mode || mapPanel.classList.contains('open')) return;
+      if (!game.mode || game.mode === 'training' || mapPanel.classList.contains('open')) return;
       if (game.mode === 'tour') tour.focus(points.find(p => p.number === n));
       else {
         const p = places[n - 1]; if (!p) return;

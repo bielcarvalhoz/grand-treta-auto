@@ -195,3 +195,51 @@ test('shot audio receives actual weapon shots only, including held automatic fir
   paint.setTrigger(false); const count=sounds.length; paint.update(.13);assert.equal(sounds.length,count);
   paint.dispose();
 });
+
+test('a character-held gun keeps its world pose and fires from its muzzle in either camera', () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(70);
+  const states = [];
+  const paint = createPaintball({ scene, camera, colliderRoots: [], updateWeaponPose(gun, state) {
+    if (gun.parent !== scene) scene.add(gun);
+    gun.position.set(.2, 1.3, -.5); gun.rotation.set(0, 0, 0);
+    states.push(state); return true;
+  } });
+  for (const cameraZ of [0, 3]) {
+    camera.position.set(0, 1.65, cameraZ); paint.update(.1); paint.update(.1);
+    close(paint.gun.position, new THREE.Vector3(.2, 1.3, -.5));
+    assert.equal(paint.gun.parent, scene);
+    assert.equal(paint.shoot(), true);
+    const ball = paint.root.children.filter(o => o.name === 'bolinha-tinta' && o.visible).at(-1);
+    close(ball.position, new THREE.Vector3(.2, 1.3 + .012 * .65, -.5 - .38 * .65));
+  }
+  paint.setWeapon('automatic'); paint.setAiming(true); paint.update(.1);
+  assert.equal(states.at(-1).weapon, 'automatic'); assert.ok(states.at(-1).aimBlend > 0);
+  paint.gun.traverse(o => { if (o.isMesh) assert.equal(o.material.depthTest, true); });
+  paint.dispose();
+});
+
+test('a chase-camera shot cannot emerge through cover between the player and the muzzle', () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(70), cover = wallAt(-.25);
+  camera.position.set(2, 1.65, 3);
+  // The reticle ray at x=2 clears this narrow panel; the weapon does not.
+  cover.geometry.dispose(); cover.geometry = new THREE.PlaneGeometry(1, 4); cover.position.y = 1.5;
+  scene.add(cover); scene.updateMatrixWorld(true);
+  const paint = createPaintball({ scene, camera, colliderRoots: [cover],
+    getShotOrigin: target => target.set(0, 1.65, 0),
+    updateWeaponPose(gun) { scene.add(gun); gun.position.set(0, 1.4, -.5); return true; },
+  });
+  assert.equal(paint.shoot(), true); paint.update(.02);
+  assert.equal(paint.stats.marks, 1, 'paint hits the cover beside the clear camera ray');
+  assert.equal(paint.stats.projectiles, 0); paint.dispose();
+});
+
+test('scene transitions clear projectiles, splats and held fire without reallocating pools', () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(), wall = wallAt(-2);
+  const paint = createPaintball({ scene, camera, colliderRoots: [wall] });
+  const pool = [...paint.root.children];
+  paint.shoot(); paint.update(.1); paint.update(.1); assert.equal(paint.stats.marks, 1);
+  paint.setWeapon('automatic'); paint.setTrigger(true); assert.equal(paint.stats.projectiles, 1);
+  paint.clearEffects();
+  assert.equal(paint.stats.marks, 0); assert.equal(paint.stats.projectiles, 0); assert.equal(paint.firing, false);
+  assert.deepEqual(paint.root.children, pool); paint.dispose();
+});

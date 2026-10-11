@@ -98,7 +98,7 @@ function splatterGeometry() {
 }
 
 /** Inputs belong to the existing player/UI, so looking by dragging never fires. */
-export function createPaintball({ scene, camera, getActive = () => true, colliderRoots = () => [scene], onShot = () => {} }) {
+export function createPaintball({ scene, camera, getActive = () => true, colliderRoots = () => [scene], onShot = () => {}, updateWeaponPose, getShotOrigin }) {
   const root = new THREE.Group(); root.name = 'paintball-effects'; root.userData.paintballIgnore = true; scene.add(root);
   const gun = new THREE.Group(); gun.name = 'pistolinha-tinta'; gun.userData.paintballIgnore = true;
   const pistolModel = new THREE.Group(), autoModel = new THREE.Group();
@@ -109,7 +109,8 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   const geometries = new Set(), materials = new Set();
   const keepGeometry = g => { geometries.add(g); return g; };
   const keepMaterial = m => { materials.add(m); return m; };
-  const gunMaterial = color => keepMaterial(new THREE.MeshBasicMaterial({ color, depthTest: false, toneMapped: false }));
+  // A held weapon must be occluded by its owner's fingers and nearby scenery.
+  const gunMaterial = color => keepMaterial(new THREE.MeshBasicMaterial({ color, depthTest: !!updateWeaponPose, toneMapped: false }));
   const graphite = gunMaterial('#303a40'), red = gunMaterial('#cf3046'), light = gunMaterial('#d6e0df');
   const colors = PAINTBALL_PALETTE.map(p => ({
     ball: keepMaterial(new THREE.MeshBasicMaterial({ color: p.color, toneMapped: false })),
@@ -149,7 +150,7 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   const marks = Array.from({ length: PAINTBALL_LIMITS.marks }, () => {
     const mesh = new THREE.Mesh(markGeometry, colors[2].paint); mesh.name = 'marca-tinta'; mesh.visible = false; mesh.renderOrder = 3; root.add(mesh); return mesh;
   });
-  const raycaster = new THREE.Raycaster(), forward = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3();
+  const raycaster = new THREE.Raycaster(), forward = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3(), shotOrigin = new THREE.Vector3();
   let colorIndex = 2, projectileIndex = 0, markIndex = 0, cooldown = 0, recoil = 0, shots = 0, disposed = false;
   let weaponIndex = 0, trigger = false, aiming = false, aimBlend = 0;
   const baseFov = camera.fov;
@@ -171,6 +172,20 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   refreshColliders();
   const trace = (from, to) => tracePaintMeshes(raycaster, from, to, refreshColliders(), ignored);
 
+  function poseWeapon() {
+    if (updateWeaponPose?.(gun, { aimBlend, recoil, weapon: PAINTBALL_WEAPONS[weaponIndex].id, active: !!getActive() })) return;
+    gun.position.x = Math.min(.34, .32 * camera.aspect) * (1 - aimBlend);
+    gun.position.y = -.34 + aimBlend * .27;
+    gun.position.z = -.62 + recoil * .045 - aimBlend * .18;
+    gun.rotation.x = -recoil * .09 * (1 - aimBlend * .6);
+  }
+
+  function clearEffects() {
+    trigger = false; recoil = 0; cooldown = 0;
+    for (const ball of projectiles) ball.mesh.visible = false;
+    for (const mark of marks) mark.visible = false;
+  }
+
   function setColor(value) {
     const index = typeof value === 'number' ? value : PAINTBALL_PALETTE.findIndex(p => p.id === value);
     if (!Number.isInteger(index) || index < 0 || index >= colors.length) throw new RangeError('Cor de tinta inválida');
@@ -181,12 +196,22 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   function shoot() {
     if (disposed || !getActive() || cooldown > 0) return false;
     camera.updateWorldMatrix(true, true);
+    poseWeapon();
+    gun.updateWorldMatrix(true, true);
     camera.getWorldPosition(origin); camera.getWorldDirection(forward); target.copy(origin).addScaledVector(forward, 100);
     const aim = trace(origin, target); if (aim) target.copy(aim.point);
     const ball = projectiles[projectileIndex++ % projectiles.length];
     muzzlePoint.getWorldPosition(ball.mesh.position);
-    // A long barrel close to a wall must not spawn the ball behind that wall.
-    if (aim && origin.distanceTo(aim.point) < origin.distanceTo(ball.mesh.position) + .15) ball.mesh.position.copy(origin);
+    // Sweep from the player's eye to the muzzle, independently of the chase
+    // camera. This also catches a wall beside the reticle at a cover corner.
+    if (getShotOrigin) getShotOrigin(shotOrigin); else shotOrigin.copy(origin);
+    const obstruction = trace(shotOrigin, ball.mesh.position);
+    if (obstruction) {
+      ball.mesh.position.copy(obstruction.point).addScaledVector(obstruction.normal, .015);
+      target.copy(obstruction.point);
+    } else if (aim && origin.distanceTo(aim.point) < origin.distanceTo(ball.mesh.position) + .15) {
+      ball.mesh.position.copy(shotOrigin);
+    }
     const weapon = PAINTBALL_WEAPONS[weaponIndex];
     ball.velocity.copy(target).sub(ball.mesh.position).normalize().multiplyScalar(weapon.speed);
     ball.mesh.material = colors[colorIndex].ball; ball.mesh.userData.paintColor = colorIndex; ball.mesh.visible = true; ball.age = 0;
@@ -215,14 +240,12 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     // A narrow horizontal FOV must not put the entire first-person weapon offscreen.
     const elapsed = Math.min(.1, Math.max(0, dt));
     cooldown = Math.max(0, cooldown - elapsed); recoil *= Math.exp(-elapsed * 16);
-    if (!gun.visible) { trigger = false; restoreView(); return; }
+    if (!gun.visible) { trigger = false; restoreView(); poseWeapon(); return; }
     aimBlend += ((aiming ? 1 : 0) - aimBlend) * (1 - Math.exp(-elapsed * 18));
     if (Math.abs(aimBlend - (aiming ? 1 : 0)) < .001) aimBlend = aiming ? 1 : 0;
     const fov = baseFov + (45 - baseFov) * aimBlend;
     if (Math.abs(camera.fov - fov) > .001) { camera.fov = fov; camera.updateProjectionMatrix(); }
-    gun.position.x = Math.min(.34, .32 * camera.aspect) * (1 - aimBlend);
-    gun.position.y = -.34 + aimBlend * .27;
-    gun.position.z = -.62 + recoil * .045 - aimBlend * .18; gun.rotation.x = -recoil * .09 * (1 - aimBlend * .6);
+    poseWeapon();
     // At most one shot per rendered frame: a slow frame never releases a burst
     // of catch-up raycasts. Projectile/splat pools remain fixed and shared.
     if (trigger && PAINTBALL_WEAPONS[weaponIndex].automatic && cooldown === 0) shoot();
@@ -251,7 +274,7 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
 
   gun.visible = !!getActive();
   return {
-    root, gun, update, shoot, setColor, setTrigger, setWeapon, palette: PAINTBALL_PALETTE, weapons: PAINTBALL_WEAPONS, dispose,
+    root, gun, update, shoot, setColor, setTrigger, setWeapon, clearEffects, palette: PAINTBALL_PALETTE, weapons: PAINTBALL_WEAPONS, dispose,
     setAiming(value) { aiming = !disposed && !!getActive() && !!value; if (!getActive()) restoreView(); },
     resetInput() { trigger = false; restoreView(); },
     async warmup(renderer) {

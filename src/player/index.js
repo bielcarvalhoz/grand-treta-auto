@@ -1,4 +1,5 @@
 import { createPlayer } from './controller.js';
+import { loadPlayerAvatar } from './avatar.js';
 
 // API pública do PERSONAGEM. Outros módulos importam SÓ daqui.
 // Controle em primeira pessoa (teclado/mouse e toque). Não conhece o mapa por dentro:
@@ -12,19 +13,30 @@ export { createPlayer } from './controller.js';
 
 export function createPlayerModule(game) {
   const { engine, physics, map } = game;
+  const training = () => game.training?.active ? game.training : null;
   const player = createPlayer(engine.camera, engine.renderer.domElement, {
-    terrain: map.terrain,
-    bounds: map.terrain.bounds,
-    bridgeHeightAt: (x, z, maxY) => physics.surfaceHeightAt(x, z, maxY),
-    collide: (x, z, r, feetY) => physics.collide(x, z, r, feetY),
-    roofAt: (x, z, y) => physics.roofAt(x, z, y),
+    terrain: { heightAt: (x, z) => (training()?.terrain || map.terrain).heightAt(x, z) },
+    bounds: () => training()?.bounds || map.terrain.bounds,
+    bridgeHeightAt: (x, z, maxY) => (training() || physics).surfaceHeightAt(x, z, maxY),
+    collide: (x, z, r, feetY) => (training() || physics).collide(x, z, r, feetY),
+    roofAt: (x, z, y) => (training() || physics).roofAt(x, z, y),
+    allowFlight: () => !training(),
   });
   const spawn = game.places[0] || { x: 0, z: 0, yaw: 0 };
   player.placeAt(spawn.x, spawn.z, spawn.yaw);
 
   engine.setShadowFocus(() => player.feet);
   // no modo de inspeção (?inspect=) a câmera é posicionada pelo script de depuração
-  engine.addSystem((dt) => { if (!game.debug.inspectionView) player.update(dt); }, 'player');
+  engine.addSystem((dt) => {
+    if (!game.debug.inspectionView) player.update(dt);
+    player.avatar?.update(dt);
+  }, 'player');
+
+  player.ready = loadPlayerAvatar({ scene: engine.scene, camera: engine.camera, player }, `${import.meta.env.BASE_URL}models/sato.glb`).then(avatar => {
+    player.avatar = avatar;
+    return avatar;
+  });
+  player.updateWeapon = (gun, state) => player.avatar?.updateWeapon(gun, state) || false;
 
   game.input.bind('KeyF', () => setTimeout(() => game.toast(player.fly ? 'Voo livre (E sobe, Control desce, Shift acelera)' : 'Andando'), 0), { label: 'voo livre' });
   return player;

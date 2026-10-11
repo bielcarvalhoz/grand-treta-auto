@@ -8,10 +8,10 @@ quebrar o trabalho de quem cuida de outro módulo.
 
 | Pasta | Módulo | Responsabilidade | Exemplos de tarefa |
 |---|---|---|---|
-| `src/core/` | Núcleo / motor | renderer, cena, câmera, céu, luz e sombra, laço de sistemas, eventos, atalhos de teclado, física compartilhada, visual cartoon/pixel, perfil gráfico, câmera de tour, configurações persistentes, lotes de instâncias, áudio procedural | pós-processamento, ciclo dia/noite, otimização de desempenho |
+| `src/core/` | Núcleo / motor | renderer, cena, câmera, céu, luz e sombra, laço de sistemas, eventos, atalhos de teclado, física compartilhada, espaço de treino, visual cartoon/pixel, perfil gráfico, câmera de tour, configurações persistentes, lotes de instâncias, áudio procedural | pós-processamento, ciclo dia/noite, otimização de desempenho |
 | `src/map/` | Mapa (mundo real) | relevo SRTM, vias, prédios do OSM, prédios procedurais, vegetação, água, muros, semáforos, placas, destinos do entorno | melhorar ruas, novos tipos de prédio, mais vegetação |
 | `src/campus/` | Campus Cidade de Deus | núcleo do Bradesco: prédios da planta oficial, muros, portarias, estacionamentos, terraplenagem, detalhes, marcos levantados em campo (`landmarks.js`: escadaria, beco, acessos, locomotiva) | novo prédio, fachada, mobiliário do campus |
-| `src/player/` | Personagem | controle em primeira pessoa: teclado, mouse, toque, colisão, pulo, voo | modelo/avatar, animação, corrida, agachar |
+| `src/player/` | Personagem | avatar Sato, animações e encaixe de armas; controle em primeira/terceira pessoa, teclado, mouse, toque, colisão, pulo, voo | modelo/avatar, animação, corrida, agachar |
 | `src/gameplay/<mecânica>/` | Jogabilidade | uma pasta por mecânica; hoje `paintball/` (pistola e metralhadora de tinta, gatilho e mira focada) | missões, carros, coletáveis, multiplayer |
 | `src/ui/` | Interface | tela de carregamento, menu, HUD, minimapa, mapa grande, avisos, gestos mobile, CSS | novas telas, configurações, acessibilidade |
 | `src/debug/` | Depuração | `window.__cdd`, vistas de inspeção `?inspect=` | ferramentas de QA |
@@ -24,7 +24,7 @@ quebrar o trabalho de quem cuida de outro módulo.
 `src/main.js` só **monta** o jogo, nesta ordem:
 
 ```
-menu + intro + downloads → fim da intro apresentado → JSON (map + campus) → core (game) → mapa (+ plugin campus) → lotes → personagem + tour → tinta/BVH → UI → visual → materiais → debug → menu pronto
+menu + intro + downloads → fim da intro apresentado → JSON (map + campus) → core (game) → mapa (+ plugin campus) → lotes → treino → personagem + GLB pronto → tour → tinta/BVH → UI → visual → materiais → debug → menu pronto
 ```
 
 `createFrontMenu()` expõe `introFinished`, que resolve após a abertura (ou pular/configurações/movimento reduzido) e dois `requestAnimationFrame`, garantindo que a capa final seja apresentada antes do trabalho pesado. `loadMapData(base, { beforeParse })` e `loadCampusData(base, { beforeParse })` baixam o corpo durante a intro e aguardam essa promessa antes de fazer JSON.parse. `main.js` também aguarda explicitamente antes de criar WebGL/PMREM e montar o mundo. Animações CSS não protegem o texto de tarefas longas na thread principal. Depois de carregar, o motor mantém sistemas leves a 15 Hz no menu opaco e pula o desenho da cidade oculta; a renderização normal volta ao iniciar campanha/tour.
@@ -32,15 +32,43 @@ menu + intro + downloads → fim da intro apresentado → JSON (map + campus) �
 Tudo gira em torno de um objeto **`game`** (criado em `core/game.js`), o único compartilhado:
 
 O personagem expõe `bindFireButton(element, onHeld)`, `setFocusedAim(bool)` e `jump()`.
+`ready` resolve quando o GLB de Sato está carregado; o bootstrap aguarda essa promessa
+antes de criar o paintball e registrar os materiais. `setCameraMode('first' | 'third')`
+e `toggleCameraMode()` alternam a vista e emitem `cameramode` em `player.events`.
+`eyePosition`, `velocity`, `grounded` e `cameraMode` descrevem o estado do jogador.
+`getShotOrigin(target)` escreve em `target` a posição dos olhos, independente da
+posição da câmera em terceira pessoa. `updateWeapon(gun, state)` posiciona a arma
+no mundo pelo encaixe da mão direita; retorna se a pose foi aplicada.
 O módulo de paintball conecta o gatilho/mira ao personagem por essa API e expõe
-`setTrigger(bool)`, `setWeapon(id)`, `setAiming(bool)` e `resetInput()`; a UI usa o
+`setTrigger(bool)`, `setWeapon(id)`, `setAiming(bool)`, `resetInput()` e `clearEffects()`; a UI usa o
 personagem para pulo e voo. Não há imports novos entre módulos.
+
+`player/avatar.js` mantém um único modelo, esqueleto e materiais para as duas vistas.
+Na primeira pessoa oculta cabeça, tronco e pernas, e gira o rig em torno dos olhos;
+na terceira mantém o corpo em pé. A locomoção anima quadril/pernas enquanto as
+poses originais de pistola animam tronco, braços, punhos e dedos. `playShot()`
+aplica o recuo do clipe original de disparo sobre a pose de mira atual. A arma acompanha a mão direita, e a primeira
+pessoa enquadra o conjunto de braços/arma sem reescrever rotações das articulações.
+Clipes preservados no GLB podem ser inspecionados com
+`avatar.setPreviewAnimation(name, time)`; a presença de `Pistol_Reload` no arquivo
+não representa uma mecânica de recarga no jogo. `public/models/sato.glb` é uma cópia
+sem alterações do `sato (4).glb` fornecido pelo usuário. A orientação dos punhos e
+a articulação dos dedos vêm da pose de pistola original, sem reescrever o asset.
+
+`core/training.js` expõe `start()`, `stop()`, `active`, `floor`, `terrain`, `bounds`
+e consultas de colisão/pisos/telhados compatíveis com as usadas pelo personagem.
+O modo `training` oculta a cidade e usa uma área plana isolada; `player/index.js`
+seleciona essas consultas enquanto o treino está ativo e desativa o voo. A saída
+restaura visibilidade, atmosfera, câmera e posição anteriores. A UI emite
+`modechange` ao entrar ou sair dos modos; paintball limpa gatilho, mira, projéteis
+e marcas de tinta. Durante o treino, seus raios consultam apenas o piso de treino.
 
 | Campo | O que é | Quem preenche / usa |
 |---|---|---|
 | `game.audio` | `unlock`, `setPreferences`, `setMenu`, `setHidden`, `ui`, `shot`, `dispose`: um AudioContext criado no primeiro gesto, música só nos menus e vozes limitadas | menu cria antes dos dados; core compartilha; UI e paintball usam |
 | `game.engine` | `scene`, `camera`, `renderer`, `sun`, `addSystem(fn, fase)`, `setShadowFocus(fn)` | core; todos usam |
 | `game.physics` | obstáculos, pisos e telhados (`addCollider`, `addSurface`, `addRoof`) e consultas (`collide`, `surfaceHeightAt`, `roofAt`) | mapa e campus **registram**; personagem **consulta** |
+| `game.training` | espaço quadriculado isolado e consultas físicas próprias; restaura o estado da cidade ao sair | core cria antes do avatar; UI inicia/encerra; player e paintball consultam |
 | `game.mode`, `game.tour`, `game.mapPoints`, `game.settings` | modo ativo, câmera independente, destinos numerados e escolhas persistentes | main, core, campus, UI |
 | `game.places` | destinos de teletransporte `{ name, x, z, yaw }` | campus e mapa adicionam; UI e personagem leem |
 | `game.input` | `bind('KeyP', fn, { when: 'playing' \| 'always', label })` | cada módulo registra as próprias teclas |
@@ -54,8 +82,8 @@ personagem para pulo e voo. Não há imports novos entre módulos.
 `engine.addSystem(fn, fase)` roda `fn(dt, t)` todo quadro. As fases rodam nesta ordem:
 
 1. `early` — antes de tudo (ex.: vento da vegetação)
-2. `player` — movimento do personagem
-3. `world` — objetos do mundo (semáforos, cancelas, tinta, placas)
+2. `player` — movimento, câmera, locomoção e atualização do avatar
+3. `world` — objetos do mundo (semáforos, cancelas, tinta, placas); paintball encaixa a arma na mão após animar o avatar
 4. `late` — interface (HUD)
 
 Depois o motor move o céu, centra a sombra no personagem e desenha.

@@ -1,6 +1,6 @@
 # Cidade de Deus 3D — Osasco/SP
 
-Mapa 3D navegável em primeira pessoa (Three.js) gerado a partir de **dados reais**:
+Mapa 3D navegável em primeira ou terceira pessoa (Three.js) gerado a partir de **dados reais**:
 
 - **OpenStreetMap** → ruas (com nome, mão única, nº de faixas, pontes/viadutos), prédios (altura e
   andares quando mapeados), uso do solo, praças, lagos, piscinas, rios, muros, semáforos e comércios.
@@ -23,9 +23,13 @@ npm install
 npm run dev
 ```
 
-Abra http://localhost:5173 e escolha **Campanha** ou **Modo tour**. A capa **Grand Treta Auto: City of God** monta um mosaico cartoon com recortes diagonais e revela o logo letra por letra enquanto os dados da cidade são baixados. A montagem 3D começa depois da abertura (ou ao pulá-la), para não travar as imagens nem a escrita do título.
+Abra http://localhost:5173 e escolha **Campanha**, **Modo treino** ou **Modo tour**. A capa **Grand Treta Auto: City of God** monta um mosaico cartoon com recortes diagonais e revela o logo letra por letra enquanto os dados da cidade são baixados. A montagem 3D começa depois da abertura (ou ao pulá-la), para não travar as imagens nem a escrita do título.
 
-No celular, jogue em pé ou deitado: toque à esquerda para abrir o analógico (avance até o limite para correr) e arraste do outro lado para mirar. Segure e arraste o ícone de tiro para mirar e disparar enquanto anda. O ícone de mira aproxima a visão e reduz a sensibilidade; O ícone da arma troca pistola/metralhadora de paintball. Há botões de pulo, voo, mapa, menu e orientação. Campanha/tour liberam depois do carregamento; configurações estão disponíveis desde o início e avisam antes de reiniciar a cidade.
+O **Modo treino** abre um espaço vazio com piso quadriculado: cada quadrado mede 2 metros. Use-o para andar, correr, pular e testar as armas e câmeras. O treino tem chão plano e limites próprios; mapa, teletransporte e voo ficam desativados. Ao sair, a posição anterior na cidade é restaurada.
+
+O personagem **Sato**, carregado de `public/models/sato.glb`, segura a pistola e a metralhadora de paintball. `X`, o botão de câmera ou a configuração de câmera alternam entre primeira e terceira pessoa. As duas vistas usam o mesmo modelo, esqueleto e materiais; em primeira pessoa aparecem apenas braços, mãos e arma. As armas acompanham as animações originais das mãos, incluindo mira e disparo.
+
+No celular, jogue em pé ou deitado: toque à esquerda para abrir o analógico (avance até o limite para correr) e arraste do outro lado para mirar. Segure e arraste o ícone de tiro para mirar e disparar enquanto anda. O ícone de mira aproxima a visão e reduz a sensibilidade; o ícone da arma troca pistola/metralhadora de paintball. Há botões de câmera, pulo, voo, mapa, menu e orientação. Campanha, treino e tour liberam depois do carregamento; configurações estão disponíveis desde o início e avisam antes de reiniciar a cidade.
 
 A música original dos menus e os efeitos de navegação/paintball usam Web Audio e começam no primeiro toque ou tecla. Música e efeitos têm controles independentes nas configurações, salvos no aparelho e aplicados sem recarregar. O áudio pausa quando a aba fica em segundo plano. Os SVGs locais são do Lucide e Game Icons; veja [créditos e licenças](public/icons/README.md). A fonte do logo é Bowlby One (SIL OFL).
 
@@ -37,6 +41,7 @@ A música original dos menus e os efeitos de navegação/paintball usam Web Audi
 | `Espaço` | pular |
 | `F` | voo livre (`E`/`Control` sobe/desce) |
 | `Q` | trocar pistola/metralhadora |
+| `X` | alternar primeira/terceira pessoa |
 | Botão direito | segurar mira focada |
 | `M` | mapa — clique para se teletransportar |
 | `1`–`7` | teletransporte (as 3 portarias do campus e outros lugares) |
@@ -82,16 +87,18 @@ src/main.js              monta o jogo (ordem dos módulos)
 src/core/                motor: render, laço, eventos, teclas, física compartilhada, visual
 src/map/                 mundo real: relevo, vias, prédios do OSM, vegetação, água (pipeline com plugins)
 src/campus/              núcleo Cidade de Deus (matriz do Bradesco) — plugin do mapa
-src/player/              personagem em primeira pessoa (teclado, mouse, toque)
+src/player/              avatar Sato, animações e câmeras (teclado, mouse, toque)
 src/gameplay/paintball/  pistolinha de tinta
 src/ui/                  carregamento, menu, HUD, minimapa, mapa grande, celular
 src/debug/               window.__cdd e vistas ?inspect=
 src/shared/              utilitários puros (geometria, aleatoriedade, texturas)
-scripts/                 dados (OSM, SRTM, campus) e verificação de módulos
+scripts/                 dados, verificação de módulos e QA do personagem
 tests/<módulo>/          testes de cada módulo
 ```
 
 `npm test` verifica as fronteiras entre módulos e roda os testes.
+
+`public/models/sato.glb` é uma cópia sem alterações do `sato (4).glb` fornecido para esta versão. Malhas, materiais, esqueleto e os 46 clipes originais permanecem intactos. O jogo usa a articulação dos dedos e a orientação dos punhos da animação de pistola do próprio arquivo, com encaixe dos braços nas armas existentes. Não há mecânica de recarga.
 
 ## Créditos
 
@@ -101,7 +108,7 @@ O núcleo tem calçadas com meio-fio, travessias e arborização regular, totens
 fachadas específicas dos prédios coloridos, escadas e rampas, portarias detalhadas e campo nivelado.
 Inclui passarela Vermelho–Rubi com entradas opostas, praça do Azul com duas escadarias em torno do chafariz,
 abrigos MOVE, catracas de entrada/saída, locomotiva junto ao CTI e bases niveladas para os prédios em encostas.
-Ruas internas têm seção plana, duas mãos e faixa central. Pistola e metralhadora de primeira pessoa atiram tinta:
+Ruas internas têm seção plana, duas mãos e faixa central. Pistola e metralhadora nas duas vistas atiram tinta:
 clique para disparar (segure com a metralhadora), `C` para trocar a cor, ou escolha a cor no menu/HUD.
 Vegetação, grama e água usam materiais com vento e ondulações inspirados em `sato-agents-lab` / Bruno Simon.
 Veja [as referências, limites e verificação](docs/campus-reference.md) e [a atribuição dos materiais](docs/nature-reference.md).
@@ -116,7 +123,8 @@ advogado o uso dos nomes/cores da marca.
 
 ## Menu, tour e configurações
 
-A tela inicial Grand Treta Auto: City of God oferece **Campanha** (exploração atual), **Modo tour**
+A tela inicial Grand Treta Auto: City of God oferece **Campanha** (exploração atual), **Modo treino**
+(espaço plano para testar o personagem e as armas), **Modo tour**
 (visão aérea, aproximação de estruturas e órbita) e **Configurações**. A cidade
 carrega em segundo plano com barra de progresso por etapas. O padrão é gráfico
 **Med** com o entorno de Osasco **desabilitado**. Configurações são salvas por aparelho;
