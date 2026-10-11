@@ -5,18 +5,21 @@ import { createPaintball } from './paintball.js';
 
 export { PAINTBALL_PALETTE, PAINTBALL_LIMITS, PAINTBALL_WEAPONS } from './paintball.js';
 export { loadWeaponModels } from './weapon-models.js';
+export { createWeaponPickups } from './pickups.js';
 
 export function createPaintballModule(game) {
   const { scene, camera, renderer } = game.engine;
   const $ = (id) => document.getElementById(id);
   const player = game.player;
-  const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen;
+  const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen && !game.ui?.weaponWheelOpen;
   const paintball = createPaintball({
     scene, camera, getActive: paintEnabled,
-    colliderRoots: () => game.training?.active ? [game.training.floor] : [scene],
+    colliderRoots: () => game.training?.active ? [game.training.floor, game.dynamicProps?.root].filter(Boolean) : [scene],
     updateWeaponPose: (gun, state) => player.updateWeapon?.(gun, state),
     getShotOrigin: target => player.getShotOrigin ? player.getShotOrigin(target) : camera.getWorldPosition(target),
     onShot: weapon => { game.audio?.shot(weapon); player.avatar?.playShot(); },
+    onAttack: (weapon, state) => { game.audio?.melee?.(weapon); player.avatar?.playAttack?.(weapon, state); },
+    onImpact: (hit, info) => game.dynamicProps?.impact(hit, info),
   });
   game.events.on('modechange', () => { paintball.resetInput(); paintball.clearEffects(); });
 
@@ -53,19 +56,6 @@ export function createPaintballModule(game) {
     $('btn-aim').setAttribute('aria-pressed', String(paintball.aiming));
   };
   $('btn-aim').addEventListener('click', () => setAiming(!paintball.aiming));
-  const syncWeapon = () => {
-    $('weapon-icon')?.setAttribute('href', `./icons/controls.svg#${paintball.weapon.id}`);
-    $('weapon-label').textContent = paintball.weapon.label.toUpperCase();
-    $('weapon-mode').textContent = paintball.weapon.automatic ? 'AUTO · SEGURE PARA ATIRAR' : 'SEMIAUTO · UM TIRO POR TOQUE';
-    $('btn-weapon').setAttribute('aria-label', `Arma: ${paintball.weapon.label}. Trocar arma de paintball`);
-  };
-  const nextWeapon = () => {
-    if (!paintEnabled()) return;
-    setTrigger(false); paintball.setWeapon((paintball.weaponIndex + 1) % paintball.weapons.length); syncWeapon();
-  };
-  syncWeapon();
-  $('btn-weapon').addEventListener('click', nextWeapon);
-  game.input.bind('KeyQ', nextWeapon, { label: 'trocar arma' });
   game.input.bind('KeyC', () => { nextPaintColor(); game.toast(`Tinta: ${paintball.color.label}`); }, { label: 'cor da tinta' });
 
   // Pistola: clique sem arrastar no fallback. Metralhadora: segurar também
@@ -101,6 +91,7 @@ export function createPaintballModule(game) {
   window.addEventListener('resize', clearPaintPointer);
   document.addEventListener('visibilitychange', () => { if (document.hidden) clearPaintPointer(); });
   player.events.addEventListener('unlock', clearPaintPointer);
+  game.events.on('weaponwheel', clearPaintPointer);
 
   game.engine.addSystem((dt) => paintball.update(dt), 'world');
   return paintball;

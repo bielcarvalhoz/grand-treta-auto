@@ -5,7 +5,8 @@ import { createHash } from 'node:crypto';
 import * as THREE from 'three';
 import { createAvatarFromGLTF } from '../../src/player/avatar.js';
 import { loadAvatarGeometry } from './load-avatar.mjs';
-import { prepareWeaponModel } from '../../src/gameplay/paintball/weapon-models.js';
+import { prepareWeaponModel, WEAPON_MODEL_FITS } from '../../src/gameplay/paintball/weapon-models.js';
+import { GAITS } from '../../src/player/locomotion.js';
 
 const asset = new URL('../../public/models/sato.glb', import.meta.url);
 test('player asset is the unmodified functional Sato version supplied by the user', async () => {
@@ -83,18 +84,138 @@ test('third-person aim tracks camera pitch and shooting retains the selected aim
   }
 });
 
-test('locomotion and held repeated fire never turn the weapon sideways', async () => {
+test('locomotion keeps firearms aimed with a small rhythmic running sway in both views', async () => {
   const { avatar, player, camera, gun } = await fixture();
   camera.rotation.set(.3, .65, 0, 'YXZ');
   for (const mode of ['first', 'third']) for (const speed of [3.1, 4.6, 9.5]) for (const side of [-1, 1]) {
     player.cameraMode = mode; player.velocity.set(speed * side, 0, 0);
+    let maxSway = 0;
     for (let frame = 0; frame < 90; frame++) {
       if (frame % 8 === 0) avatar.playShot();
       avatar.update(.016); avatar.updateWeapon(gun, { active: true });
       const frameRotation = mode === 'first' ? camera.quaternion.clone() : new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
       const relative = new THREE.Euler().setFromQuaternion(frameRotation.invert().multiply(gun.quaternion), 'YXZ');
-      assert.ok(Math.abs(relative.y) < .00001 && Math.abs(relative.z) < .00001, `${mode}/${speed}: strafe or recoil introduced sideways aim`);
+      maxSway = Math.max(maxSway, Math.abs(relative.y), Math.abs(relative.z));
+      assert.ok(Math.abs(relative.y) < .01 && Math.abs(relative.z) < .015, `${mode}/${speed}: sway must stay below one degree`);
     }
+    if (speed > 7) assert.ok(maxSway > .007, `${mode}: running must move the aim with the gait`);
+    if (speed < 3.5) assert.ok(maxSway < .00001, `${mode}: walking must preserve stable aim`);
+  }
+});
+
+test('slow movement selects walking and faster movement selects the supplied jog and sprint clips', async () => {
+  const { avatar, player } = await fixture();
+  for (const [speed, expected] of [[0, 'Idle_Loop'], [1.5, 'Walk_Loop'], [4.6, 'Jog_Fwd_Loop'], [9.5, 'Sprint_Loop']]) {
+    player.velocity.set(speed, 0, 0); avatar.update(.016);
+    assert.equal(avatar.animationState.motion, expected);
+  }
+  player.grounded = false; avatar.update(.016);
+  assert.equal(avatar.animationState.motion, 'Jump_Loop');
+});
+
+test('aiming while moving retains a subtle gait sway in both camera modes', async () => {
+  const { avatar, player, gun, camera } = await fixture();
+  player.velocity.set(0, 0, -3.1);
+  for (const mode of ['first', 'third']) {
+    player.cameraMode = mode; let maxSway = 0;
+    for (let i = 0; i < 100; i++) {
+      avatar.update(.016); avatar.updateWeapon(gun, { aimBlend: 1 });
+      const frame = mode === 'first' ? camera.quaternion.clone() : new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
+      const angle = new THREE.Euler().setFromQuaternion(frame.invert().multiply(gun.quaternion), 'YXZ');
+      maxSway = Math.max(maxSway, Math.abs(angle.y), Math.abs(angle.z));
+    }
+    assert.ok(maxSway > .001 && maxSway < .004, `${mode}: aimed walk must sway gently without losing aim`);
+  }
+});
+
+test('footstep event phases coincide with descending foot contact in the supplied GLB', async () => {
+  const { avatar } = await fixture();
+  const height = side => Math.min(...['foot', 'toe'].map(name => avatar.bones[`DEF-${name}${side}`].getWorldPosition(new THREE.Vector3()).y));
+  for (const gait of [GAITS.walk, GAITS.jog, GAITS.run]) {
+    for (const [index, side] of ['L', 'R'].entries()) {
+      let minimum = Infinity;
+      for (let frame = 0; frame < 60; frame++) {
+        avatar.setPreviewAnimation(gait.clip, gait.duration * frame / 60); minimum = Math.min(minimum, height(side));
+      }
+      const contact = gait.contacts[index];
+      avatar.setPreviewAnimation(gait.clip, gait.duration * ((contact + .9) % 1)); const before = height(side);
+      avatar.setPreviewAnimation(gait.clip, gait.duration * contact); const planted = height(side);
+      assert.ok(planted < minimum + .025, `${gait.clip}/${side}: sound precedes ground contact`);
+      assert.ok(before > planted + .003, `${gait.clip}/${side}: sound must mark landing, not lifting the foot`);
+    }
+  }
+});
+
+test('every imported weapon grip touches its mesh and stays attached through both camera modes', async () => {
+  const { avatar, player, gun, camera } = await fixture();
+  camera.position.copy(player.eyePosition); camera.updateMatrixWorld(true);
+  for (const id of Object.keys(WEAPON_MODEL_FITS)) {
+    const loaded = prepareWeaponModel(await loadAvatarGeometry(new URL(`../../public/models/weapons/${id}.glb`, import.meta.url)), id);
+    const kind = /knife|axe|bat/.test(id) ? 'melee' : 'firearm';
+    loaded.model.updateMatrixWorld(true);
+    let nearest = Infinity;
+    loaded.model.traverse(mesh => {
+      if (!mesh.isMesh) return;
+      const position = mesh.geometry.attributes.position, index = mesh.geometry.index, count = index?.count ?? position.count;
+      for (let i = 0; i < count; i += 3) {
+        const points = [0, 1, 2].map(n => new THREE.Vector3().fromBufferAttribute(position, index ? index.getX(i + n) : i + n).applyMatrix4(mesh.matrixWorld));
+        const closest = new THREE.Triangle(...points).closestPointToPoint(loaded.grip, new THREE.Vector3());
+        nearest = Math.min(nearest, closest.distanceTo(loaded.grip) * .65);
+      }
+    });
+    assert.ok(nearest < .032, `${id}: hand socket misses the actual handle mesh by ${nearest} m`);
+    gun.clear(); gun.add(loaded.model); gun.userData.weaponGrip = loaded.grip;
+    for (const mode of ['first', 'third']) {
+      player.cameraMode = mode; avatar.setWeapon({ id, kind }); avatar.update(.016); avatar.updateWeapon(gun, { weapon: id, kind });
+      assert.ok(avatar.weaponDiagnostics.gripError < .003, `${mode}/${id}: detached grip`);
+      if (kind === 'melee') {
+        const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(gun.quaternion);
+        const longFirst = mode === 'first' && ['axe', 'bat', 'bat-barbed'].includes(id);
+        const expected = longFirst ? new THREE.Vector3(0, Math.sin(1), -Math.cos(1)) : new THREE.Vector3(0, 1, 0);
+        assert.ok(direction.angleTo(expected) < (mode === 'third' ? .35 : .2), `${mode}/${id}: blade/shaft orientation misses its held pose`);
+        if (longFirst) {
+          const tip = gun.localToWorld(loaded.muzzle.clone()).project(camera);
+          assert.ok(Math.abs(tip.x) < .98 && Math.abs(tip.y) < .98 && tip.z > -1 && tip.z < 1, `${id}: long melee tip is cropped in first person`);
+        }
+        avatar.playAttack({ id, kind, interval: .65 });
+        for (let frame = 0; frame < 13; frame++) {
+          avatar.update(.05); avatar.updateWeapon(gun, { weapon: id, kind });
+          assert.ok(avatar.weaponDiagnostics.gripError < .003, `${mode}/${id}: grip detached during swing`);
+          if (mode === 'first') for (const side of ['R', 'L']) {
+            const shoulder = camera.worldToLocal(avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3()));
+            assert.ok(shoulder.z > -camera.near, `${id}: sword animation exposes the shoulder cut`);
+          }
+        }
+      } else {
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(gun.quaternion);
+        assert.ok(forward.angleTo(new THREE.Vector3(0, 0, -1)) < .05, `${mode}/${id}: firearm does not point forward`);
+      }
+    }
+  }
+});
+
+test('authored sword swings and alternating punches remain visible and hand-aligned in both cameras', async () => {
+  const { avatar, player, gun } = await fixture();
+  gun.userData.weaponGrip = new THREE.Vector3(0, -.1, .05);
+  for (const mode of ['first', 'third']) {
+    player.cameraMode = mode;
+    avatar.setWeapon({ id: 'knife', kind: 'melee' }); avatar.update(.016);
+    avatar.updateWeapon(gun, { weapon: 'knife', kind: 'melee' });
+    assert.deepEqual(avatar.playAttack({ id: 'knife', kind: 'melee', interval: .65 }), { clip: 'Sword_Attack', duration: .65 });
+    const positions = [];
+    for (let i = 0; i < 13; i++) {
+      avatar.update(.05); avatar.updateWeapon(gun, { weapon: 'knife', kind: 'melee' });
+      positions.push(gun.position.clone());
+      assert.ok(avatar.weaponDiagnostics.gripError < .003, `${mode}: sword detached during attack`);
+    }
+    assert.ok(positions.some(position => position.distanceTo(positions[0]) > .08), `${mode}: sword swing was erased by framing`);
+    assert.equal(avatar.animationState.attack, null);
+    const first = avatar.playAttack({ id: 'fists', kind: 'unarmed', interval: .42 });
+    for (let i = 0; i < 10; i++) { avatar.update(.05); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' }); }
+    const second = avatar.playAttack({ id: 'fists', kind: 'unarmed', interval: .42 });
+    assert.notEqual(first.clip, second.clip);
+    assert.ok(['Punch_Jab', 'Punch_Cross'].includes(first.clip) && ['Punch_Jab', 'Punch_Cross'].includes(second.clip));
+    for (let i = 0; i < 10; i++) { avatar.update(.05); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' }); }
   }
 });
 

@@ -151,7 +151,7 @@ test('held automatic fire has bounded cadence/pools and stops on release, switch
   assert.equal(paint.gun.getObjectByName('metralhadora-paintball').visible,true);
   const initial=paint.stats.shots;paint.setTrigger(true);
   for(let i=0;i<100;i++)paint.update(.02);
-  assert.ok(paint.stats.shots-initial>=12&&paint.stats.shots-initial<=18);
+  assert.ok(paint.stats.shots-initial>=21&&paint.stats.shots-initial<=23, 'M4A4 primary cadence is 90 ms, about 22 shots over two seconds');
   assert.equal(paint.root.children.length,poolSize);assert.ok(paint.stats.projectiles<=PAINTBALL_LIMITS.projectiles);
   let shots=paint.stats.shots;paint.update(5);assert.ok(paint.stats.shots-shots<=1,'no catch-up burst after a stalled frame');
   paint.setTrigger(false);shots=paint.stats.shots;for(let i=0;i<20;i++)paint.update(.05);assert.equal(paint.stats.shots,shots);

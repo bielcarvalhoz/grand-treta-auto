@@ -25,11 +25,11 @@ npm run dev
 
 Abra http://localhost:5173 e escolha **Campanha**, **Modo treino** ou **Modo tour**. A capa **Grand Treta Auto: City of God** monta um mosaico cartoon com recortes diagonais e revela o logo letra por letra enquanto os dados da cidade são baixados. A montagem 3D começa depois da abertura (ou ao pulá-la), para não travar as imagens nem a escrita do título.
 
-O **Modo treino** abre um espaço vazio com piso quadriculado: cada quadrado mede 2 metros. Use-o para andar, correr, pular e testar as armas e câmeras. O treino tem chão plano e limites próprios; mapa, teletransporte e voo ficam desativados. Ao sair, a posição anterior na cidade é restaurada.
+O **Modo treino** abre um espaço quadriculado com uma caixa física Rapier perto do spawn e uma cópia de cada arma no chão. Cada quadrado mede 2 metros. Use-o para andar, correr, pular e testar tiros, golpes e câmeras. Na campanha há outra caixa no centro do campo de futebol e armas extras ao redor. Ao sair do treino, a posição anterior na cidade é restaurada.
 
-O personagem **Sato**, carregado de `public/models/sato.glb`, segura a pistola e a metralhadora de paintball. `X`, o botão de câmera ou a configuração de câmera alternam entre primeira e terceira pessoa. O scroll para cima seleciona primeira pessoa; para baixo, terceira. As duas vistas usam o mesmo modelo, esqueleto e materiais; em primeira pessoa aparecem apenas braços, mãos e arma. Os GLBs de armas Quaternius enviados pelo usuário acompanham as animações originais das mãos, incluindo mira e disparo. A tinta colore somente uma faixa da pistola e um detalhe do rifle; o restante mantém o cinza original.
+O personagem **Sato**, carregado de `public/models/sato.glb`, começa com Glock-18, M4A4 e faca. São **2 slots de fogo + 1 melee**, com socos sempre disponíveis. O catálogo inclui revólver R8, Nova, AWP, MP5-SD, três facas, machado e bastão com arame. As referências de dano, cadência e funcionamento estão em [docs/weapons.md](docs/weapons.md). Todas as armas mantêm detalhes na cor escolhida; melee e socos não pintam o chão. `X`, o ícone discreto à esquerda ou o scroll alternam primeira/terceira pessoa. As vistas compartilham o mesmo Sato e suas animações de tiro, espada e sequência de socos.
 
-No celular, jogue em pé ou deitado: toque à esquerda para abrir o analógico (avance até o limite para correr) e arraste do outro lado para mirar. Segure e arraste o ícone de tiro para mirar e disparar enquanto anda. O ícone de mira aproxima a visão e reduz a sensibilidade; o ícone da arma troca pistola/metralhadora de paintball. Há botões de câmera, pulo, voo, mapa, menu e orientação. Campanha, treino e tour liberam depois do carregamento; configurações estão disponíveis desde o início e avisam antes de reiniciar a cidade.
+No celular, jogue em pé ou deitado: a intensidade do analógico controla caminhada, trote e corrida em qualquer direção. Segure e arraste o botão de ataque para mirar enquanto ataca. Segure o botão da arma ou `Q` para abrir a roda, indique a opção com dedo, mouse ou analógico e solte para equipar. Perto de uma arma, use o botão de pegar ou `E`: o slot de fogo selecionado (ou o último usado) é substituído; melee troca só o slot 3. A arma anterior fica no chão. Há botões de câmera, pulo, voo, mapa, menu e orientação.
 
 A música original dos menus e os efeitos de navegação/paintball usam Web Audio e começam no primeiro toque ou tecla. Música e efeitos têm controles independentes nas configurações, salvos no aparelho e aplicados sem recarregar. O áudio pausa quando a aba fica em segundo plano. Os SVGs locais são do Lucide e Game Icons; veja [créditos e licenças](public/icons/README.md). A fonte do logo é Bowlby One (SIL OFL).
 
@@ -40,7 +40,8 @@ A música original dos menus e os efeitos de navegação/paintball usam Web Audi
 | `Shift` | correr |
 | `Espaço` | pular |
 | `F` | voo livre (`E`/`Control` sobe/desce) |
-| `Q` | trocar pistola/metralhadora |
+| Segurar `Q` | abrir roda; apontar e soltar para equipar |
+| `E` | pegar arma próxima e soltar a anterior do slot |
 | `X` | alternar primeira/terceira pessoa |
 | Scroll ↑ / ↓ | primeira / terceira pessoa |
 | Botão direito | segurar mira focada |

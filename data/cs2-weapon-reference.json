@@ -1,0 +1,103 @@
+{
+  "source": "https://raw.githubusercontent.com/SteamDatabase/GameTracking-CS2/master/game/csgo/pak01_dir/scripts/weapons.vdata",
+  "retrieved": "2026-10-11",
+  "sha256": "46e7a84b46c620e8daf11c403ee9152a5faa1a033407748b527862aa3147236b",
+  "weapons": {
+    "weapon_glock": {
+      "m_nDamage": 30,
+      "m_flCycleTime": [
+        0.15,
+        0.3
+      ],
+      "m_nNumBullets": 1,
+      "m_flSpread": [
+        0.002,
+        0.015
+      ],
+      "m_bIsFullAuto": false,
+      "m_flInaccuracyStand": [
+        0.0056,
+        0.0056
+      ],
+      "m_nZoomFOV1": 90
+    },
+    "weapon_m4a1": {
+      "m_nDamage": 33,
+      "m_flCycleTime": 0.09,
+      "m_nNumBullets": 1,
+      "m_flSpread": [
+        0.0006,
+        0.00045
+      ],
+      "m_bIsFullAuto": true,
+      "m_flInaccuracyStand": [
+        0.0049,
+        0.0049
+      ],
+      "m_nZoomFOV1": 90
+    },
+    "weapon_revolver": {
+      "m_nDamage": 86,
+      "m_flCycleTime": [
+        0.5,
+        0.4
+      ],
+      "m_nNumBullets": 1,
+      "m_flSpread": [
+        0.00052,
+        0.068
+      ],
+      "m_bIsFullAuto": true,
+      "m_flInaccuracyStand": [
+        0.002,
+        0.012
+      ],
+      "m_nZoomFOV1": 90
+    },
+    "weapon_nova": {
+      "m_nDamage": 26,
+      "m_flCycleTime": 0.88,
+      "m_nNumBullets": 9,
+      "m_flSpread": [
+        0.04,
+        0.04
+      ],
+      "m_bIsFullAuto": false,
+      "m_flInaccuracyStand": [
+        0.007,
+        0.007
+      ],
+      "m_nZoomFOV1": 90
+    },
+    "weapon_awp": {
+      "m_nDamage": 115,
+      "m_flCycleTime": 1.455,
+      "m_nNumBullets": 1,
+      "m_flSpread": [
+        0.0002,
+        0.0002
+      ],
+      "m_bIsFullAuto": false,
+      "m_flInaccuracyStand": [
+        0.0808,
+        0.002
+      ],
+      "m_nZoomFOV1": 40
+    },
+    "weapon_mp5sd": {
+      "m_nDamage": 28,
+      "m_flCycleTime": 0.08,
+      "m_nNumBullets": 1,
+      "m_flSpread": [
+        0.0006,
+        0.0006
+      ],
+      "m_bIsFullAuto": true,
+      "m_flInaccuracyStand": [
+        0.01,
+        0.01
+      ],
+      "m_nZoomFOV1": 90
+    }
+  }
+}

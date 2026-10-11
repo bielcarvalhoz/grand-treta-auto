@@ -3,6 +3,7 @@ import { IS_TOUCH } from '../core/index.js';
 import { createHud } from './hud.js';
 import { placeMarker } from './marker-layout.js';
 import { installGestureGuard } from './gestures.js';
+import { createWeaponWheel } from './weapon-wheel.js';
 import './style.css';
 
 export { loading, createFrontMenu } from './front-menu.js';
@@ -21,6 +22,7 @@ export function createUI(game) {
   const overlay = $('overlay'), mapPanel = $('map-panel'), help = $('help');
   const points = game.mapPoints, places = game.places;
   let touchSession = IS_TOUCH;
+  const weaponWheel = createWeaponWheel(game);
 
   const toast = msg => {
     const el = $('toast'); el.textContent = msg; el.classList.add('show');
@@ -41,7 +43,7 @@ export function createUI(game) {
     if (touch) document.body.classList.add('touch');
     document.body.classList.toggle('flying', player.fly);
     $('btn-fly').setAttribute('aria-pressed', String(player.fly));
-    help.textContent = `WASD andar · Shift correr · Espaço pular · Segurar: tiro · Q arma · X câmera${mode === 'training' ? '' : ' · F voar · M mapa'} · H esconder`;
+    help.textContent = `WASD andar · Shift correr · Espaço pular · Segurar: atacar · Segure Q: armas · E pegar · X câmera${mode === 'training' ? '' : ' · F voar · M mapa'} · H esconder`;
     game.events.emit('modechange', mode);
     player.start(touch);
   }
@@ -97,10 +99,11 @@ export function createUI(game) {
     $('camera-mode').value = player.cameraMode;
     $('btn-camera').setAttribute('aria-pressed', String(third));
     $('btn-camera').setAttribute('aria-label', `Câmera em ${third ? 'terceira' : 'primeira'} pessoa. Alternar câmera`);
-    $('camera-label').textContent = third ? '3ª pessoa' : '1ª pessoa';
+    $('camera-icon').setAttribute('href', `./icons/controls.svg#${third ? 'camera-third' : 'camera-first'}`);
+    $('btn-camera').title = `${third ? 'Terceira' : 'Primeira'} pessoa · X para alternar`;
   }
   function toggleCamera() {
-    if (!walkingMode()) return;
+    if (!walkingMode() || weaponWheel.open) return;
     player.toggleCameraMode();
     syncCameraMode();
     toast(`Câmera: ${player.cameraMode === 'third' ? 'terceira' : 'primeira'} pessoa`);
@@ -112,7 +115,7 @@ export function createUI(game) {
   syncCameraMode();
   game.input.bind('KeyX', toggleCamera, { label: 'primeira / terceira pessoa' });
   engine.renderer.domElement.addEventListener('wheel', event => {
-    if (!walkingMode() || !player.active || mapPanel.classList.contains('open') || event.ctrlKey || !event.deltaY) return;
+    if (!walkingMode() || !player.active || weaponWheel.open || mapPanel.classList.contains('open') || event.ctrlKey || !event.deltaY) return;
     event.preventDefault();
     // Direction selects a view, so a smooth trackpad gesture cannot flicker it.
     player.setCameraMode(event.deltaY < 0 ? 'first' : 'third');
@@ -237,7 +240,7 @@ export function createUI(game) {
   $('minimap').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMap(); } });
   $('map-close').addEventListener('click', () => closeMap());
   game.input.bind('KeyM', () => mapPanel.classList.contains('open') ? closeMap() : openMap(), { when: 'always', label: 'mapa' });
-  game.input.bind('Escape', () => { if (game.mode) showMenu(); }, { when: 'always' });
+  game.input.bind('Escape', () => { if (weaponWheel.open) weaponWheel.cancel(); else if (game.mode) showMenu(); }, { when: 'always' });
   game.input.bind('KeyH', () => help.classList.toggle('hidden'), { label: 'esconder ajuda' });
   for (let n = 1; n <= 9; n++) {
     const go = () => {
@@ -255,5 +258,5 @@ export function createUI(game) {
     updateOrientation();
     if (tour.active) tour.setViewportInset(innerHeight - $('tour-panel').getBoundingClientRect().top + 12);
   });
-  return { toast, hud, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); } };
+  return { toast, hud, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); }, get weaponWheelOpen() { return weaponWheel.open; } };
 }

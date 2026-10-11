@@ -319,14 +319,12 @@ body.tour-active .hud-left, body.tour-active .hud-top-right, body.tour-active .c
 #training-status span { display: block; font-size: 10px; letter-spacing: .14em; color: #c1d6e8; margin-bottom: 5px; }
 #training-status b { font-size: 19px; }
 #training-status p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.camera-toggle { position: absolute; top: 191px; left: 14px; display: flex; gap: 5px; align-items: center; padding: 9px 12px; border: 1px solid #ffffff40; border-radius: 4px; color: var(--text); background: var(--bg); pointer-events: auto; font-size: 12px; }
-.camera-toggle b { font-weight: 600; }
-.camera-toggle small { margin-left: 8px; color: var(--muted); }
+.camera-toggle { position: absolute; top: 191px; left: 14px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; padding: 8px; border: 1px solid #ffffff50; border-radius: 50%; color: #f6f2e9; background: #15222a99; pointer-events: auto; touch-action: none; }
+.camera-toggle .control-icon { width: 25px; height: 25px; }
 body.tour-active .camera-toggle { display: none; }
 body.training-active #training-status { display: block; }
 body.training-active #hud .panel, body.training-active #minimap, body.training-active #hud-fps, body.training-active #btn-map, body.training-active #btn-fly, body.training-active .attrib { display: none !important; }
-body.touch .camera-toggle { top: max(114px, calc(env(safe-area-inset-top) + 102px)); left: auto; right: max(12px, env(safe-area-inset-right)); width: 58px; height: 44px; justify-content: center; padding: 4px; font-size: 11px; border-radius: 10px; }
-body.touch.training-active .camera-toggle { top: max(66px, calc(env(safe-area-inset-top) + 54px)); }
+body.touch .camera-toggle { position: static; width: 44px; height: 44px; }
 body.touch #training-status { top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); max-width: calc(100% - 94px); padding: 9px 11px; }
 body.touch #training-status b { font-size: 15px; }
 body.touch #training-status p { font-size: 10px; }
@@ -335,4 +333,43 @@ body.touch.training-active .hud-left { top: max(132px, calc(env(safe-area-inset-
   body:not(.touch) .camera-toggle { top: 135px; }
   body.training-active .desktop-menu { top: 132px; }
   body.training-active:not(.touch) .camera-toggle { top: 172px; }
+}
+
+/* Slots and available weapons are shown only inside the held radial menu. */
+#btn-pickup { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; min-height: 44px; max-width: 80vw; padding: 9px 13px; border: 1px solid #ffe1ab99; border-radius: 9px; background: #17252ce8; color: #fff2d5; pointer-events: auto; touch-action: none; }
+#btn-pickup span { display: flex; flex-direction: column; gap: 3px; text-align: left; }
+#btn-pickup b { font-size: 12px; }
+#btn-pickup small { font-size: 10px; color: #c9d2d7; }
+#btn-pickup[hidden], #weapon-wheel[hidden] { display: none !important; }
+body.tour-active #btn-pickup { display: none !important; }
+body.melee-equipped #btn-color { opacity: .45; }
+
+#weapon-wheel { position: fixed; inset: 0; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff3db; background: #08101855; backdrop-filter: blur(2px); pointer-events: none; }
+#weapon-wheel-ring { --wheel-size: min(68vh, 76vw, 390px); position: relative; width: var(--wheel-size); height: var(--wheel-size); border-radius: 50%; background: conic-gradient(from -45deg, #c69a51bd 0deg 90deg, #15232de8 90deg 360deg); border: 2px solid #ffffff60; box-shadow: 0 10px 60px #0006; }
+#weapon-wheel-ring[data-selected="1"] { background: conic-gradient(from -45deg, #15232de8 0deg 90deg, #c69a51bd 90deg 180deg, #15232de8 180deg 360deg); }
+#weapon-wheel-ring[data-selected="2"] { background: conic-gradient(from -45deg, #15232de8 0deg 180deg, #c69a51bd 180deg 270deg, #15232de8 270deg 360deg); }
+#weapon-wheel-ring[data-selected="3"] { background: conic-gradient(from -45deg, #15232de8 0deg 270deg, #c69a51bd 270deg 360deg); }
+#weapon-wheel-ring::before, #weapon-wheel-ring::after { content: ''; position: absolute; inset: 50% 0 auto; height: 1px; background: #ffffff40; transform: rotate(45deg); }
+#weapon-wheel-ring::after { transform: rotate(-45deg); }
+.weapon-wheel-option { position: absolute; width: 30%; display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
+.weapon-wheel-option[data-index="0"] { left: 35%; top: 7%; }
+.weapon-wheel-option[data-index="1"] { right: 2%; top: 39%; }
+.weapon-wheel-option[data-index="2"] { left: 35%; bottom: 7%; }
+.weapon-wheel-option[data-index="3"] { left: 2%; top: 39%; }
+.weapon-wheel-option .control-icon { width: 39px; height: 30px; }
+.weapon-wheel-option b { font-size: 11px; line-height: 1.1; }
+.weapon-wheel-option small { font-size: 8px; color: #c9d2d7; }
+.weapon-wheel-option[aria-selected="true"] { color: #fff4d6; }
+.weapon-wheel-center { position: absolute; left: 33%; top: 33%; width: 34%; height: 34%; display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; border: 1px solid #ffffff50; border-radius: 50%; padding: 9px; text-align: center; background: #101a22f5; }
+.weapon-wheel-center b { font-size: 12px; }
+.weapon-wheel-center small { font-size: 7px; line-height: 1.5; color: #c3ced2; }
+#weapon-wheel-cursor { position: absolute; left: calc(50% - 3px); top: calc(50% - 3px); width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px #ffcb75; pointer-events: none; }
+#weapon-wheel > p { text-align: center; font-size: 12px; margin: 14px 12px 5px; text-shadow: 0 1px 3px #000; }
+#weapon-wheel > small { font-size: 10px; color: #dae0e2; }
+body.weapon-wheel-open #crosshair { opacity: 0; }
+body.weapon-wheel-open #btn-weapon { border-color: #ffcf77; color: #ffe1ab; }
+body.touch #btn-pickup { bottom: max(102px, calc(env(safe-area-inset-bottom) + 90px)); }
+@media (orientation: portrait) {
+  body.touch #btn-pickup { bottom: max(172px, calc(env(safe-area-inset-bottom) + 160px)); }
+  #weapon-wheel-ring { --wheel-size: min(76vw, 390px); }
 }

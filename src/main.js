@@ -8,11 +8,11 @@
 //   debug/     inspeção e QA
 //   shared/    utilitários puros (geometria, aleatoriedade, texturas)
 // Regras e responsabilidades: docs/ARQUITETURA.md
-import { createGame, detectQuality, debugOptions, setupVisualStyle, createTour, createTraining, partitionStaticInstances } from './core/index.js';
+import { createGame, detectQuality, debugOptions, setupVisualStyle, createTour, createTraining, partitionStaticInstances, createDynamicProps, bindLocomotionAudio } from './core/index.js';
 import { loadMapData, buildMap } from './map/index.js';
 import { loadCampusData, createCampusPlugin } from './campus/index.js';
 import { createPlayerModule } from './player/index.js';
-import { createPaintballModule, loadWeaponModels } from './gameplay/paintball/index.js';
+import { createPaintballModule, loadWeaponModels, createWeaponPickups } from './gameplay/paintball/index.js';
 import { createUI, loading, applyDeviceClasses, createFrontMenu } from './ui/index.js';
 import { installDebug } from './debug/index.js';
 
@@ -36,12 +36,17 @@ async function main() {
   await loading.status('Preparando a navegação...', 88);
   game.instanceStats = partitionStaticInstances(game.engine.scene);
   game.training = createTraining(game);
+  await loading.status('Preparando caixas e física Rapier...', 89);
+  game.dynamicProps = await createDynamicProps(game);
   game.player = createPlayerModule(game);
+  bindLocomotionAudio(game);
   await loading.status('Preparando o personagem Sato...', 90);
   await game.player.ready;
   game.tour = createTour(game);
   game.paintball = createPaintballModule(game);
-  game.paintball.setWeaponModels(await loadWeaponModels(base));
+  const weaponModels = await loadWeaponModels(base);
+  game.paintball.setWeaponModels(weaponModels);
+  game.weaponPickups = createWeaponPickups(game, weaponModels);
   game.ui = createUI(game);
   game.styler = setupVisualStyle(game); // depois de tudo estar na cena
   game.ui.showMenu();

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { prepareWeaponModel } from '../../src/gameplay/paintball/weapon-models.js';
+import { prepareWeaponModel, WEAPON_MODEL_FITS } from '../../src/gameplay/paintball/weapon-models.js';
 import { createPaintball } from '../../src/gameplay/paintball/paintball.js';
 import { loadAvatarGeometry } from '../player/load-avatar.mjs';
 
@@ -33,4 +33,23 @@ test('Quaternius weapons normalize source transforms, tint only accents and fire
     paint.clearEffects();
   }
   paint.dispose();
+});
+
+test('all supplied firearm and melee GLBs normalize to their physical length and a forward tip', async () => {
+  for (const [id, fit] of Object.entries(WEAPON_MODEL_FITS)) {
+    const loaded = await loadAvatarGeometry(new URL(`../../public/models/weapons/${id}.glb`, import.meta.url));
+    const model = prepareWeaponModel(loaded, id), holder = new THREE.Group(); holder.scale.setScalar(.65); holder.add(model.model); holder.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(holder);
+    assert.ok(Math.abs(bounds.getSize(new THREE.Vector3()).z - fit.length) < .00001, `${id} length`);
+    assert.ok(model.muzzle.z < model.grip.z, `${id} tip must point forward`);
+    assert.equal(model.grip.length(), 0, `${id} grip belongs at hand socket`);
+    let accents = 0;
+    model.model.traverse(object => {
+      if (!object.isMesh || object.material.name !== fit.tint) return;
+      const shader = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>' };
+      object.material.onBeforeCompile(shader); model.setColor('#2879b6');
+      assert.equal(shader.uniforms.paintTint.value.getHexString(), '2879b6'); accents++;
+    });
+    assert.ok(accents > 0, `${id} must have a working color accent`);
+  }
 });
