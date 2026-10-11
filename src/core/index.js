@@ -16,3 +16,4 @@ export { partitionStaticInstances } from './instances.js';
 export { createAudio } from './audio.js';
 export { createDynamicProps } from './dynamic-props.js';
 export { bindLocomotionAudio } from './locomotion-audio.js';
+export { createCharacterStore, normalizeAppearance, DEFAULT_APPEARANCE, APPEARANCE_OPTIONS } from './characters.js';

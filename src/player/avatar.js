@@ -5,6 +5,8 @@ import { GAITS, gaitForSpeed } from './locomotion.js';
 import { createPoseConfig } from './pose-config.js';
 import { fillThumbWebs } from './hand-shape.js';
 import { createFirstPersonFists } from './first-person-fists.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+import { createAppearance } from './appearance.js';
 
 const upperTrack = /spine|neck|head|shoulder|upper_arm|forearm|hand|f_index|f_middle|f_ring|f_pinky|thumb|support_elbow/;
 const namedClip = (clips, name) => clips.find(clip => clip.name.split('|').at(-1) === name);
@@ -60,6 +62,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   root.updateMatrixWorld(true);
   fillThumbWebs(meshes);
   sweepHairTips(meshes);
+  const appearance = createAppearance(model, bones, meshes);
   const poseConfig = createPoseConfig();
   const head = bones['DEF-head'];
   const uprightHead = head?.getWorldQuaternion(quaternion());
@@ -152,9 +155,10 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   }
   function visibility() {
     for (const mesh of meshes) {
-      mesh.visible = !!preview || player.cameraMode === 'third' || (heldKind !== 'relaxed' && !scopedView && /Sato_arm_hand_[LR]/.test(mesh.name));
+      mesh.visible = !mesh.userData.characterHidden && (!!preview || player.cameraMode === 'third' || (heldKind !== 'relaxed' && !scopedView && /Sato_arm_hand_[LR]/.test(mesh.name)));
       mesh.castShadow = player.cameraMode === 'third';
     }
+    appearance.setHeadVisible(!!preview || player.cameraMode === 'third');
   }
   function update(dt) {
     firstPersonFists.restore();
@@ -364,9 +368,13 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   }
   update(0);
   return { root, model, bones, meshes, mixer, clips, scale, update, updateWeapon, playShot, playAttack, setWeapon,
-    setPreviewAnimation, weaponDiagnostics, animationState, poseConfig };
+    setPreviewAnimation, weaponDiagnostics, animationState, poseConfig, appearance };
 }
 
 export async function loadPlayerAvatar(options, url) {
-  return createAvatarFromGLTF(await new GLTFLoader().loadAsync(url), options);
+  const gltf = await new GLTFLoader().loadAsync(url);
+  const source = cloneSkeleton(gltf.scene);
+  const avatar = createAvatarFromGLTF(gltf, options);
+  avatar.cloneForPreview = context => createAvatarFromGLTF({ scene: cloneSkeleton(source), animations: gltf.animations }, context);
+  return avatar;
 }

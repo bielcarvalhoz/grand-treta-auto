@@ -55,6 +55,32 @@ o cartão para print e o JSON identificam arma, vista, alvo e unidades. Ajustes 
 encaixe são aplicados depois do enquadramento automático, sem serem anulados por ele.
 `player.releasePointerForUI()` solta o cursor mantendo o treino ativo para desktop.
 
+`core/characters.js` mantém o elenco local versionado (`cdd.characters.v1`), normaliza
+nomes/cores/opções e expõe `createCharacterStore()`, `normalizeAppearance`,
+`DEFAULT_APPEARANCE` e `APPEARANCE_OPTIONS` pela API pública do núcleo. `main.js`
+injeta o store criado pelo menu em `game.characters`. `ui/character-menu.js` gerencia
+seleção explícita, rascunho, salvar/cancelar e a prévia; `ui.startMode()` exige essa
+confirmação nos três modos. A rota técnica `/debug` mantém a entrada direta no treino.
+O submenu **Modo treta** chama o modo interno `campaign` para **Um jogador** e mantém
+**Multijogador** desabilitado; não altera a simulação nem adiciona rede nesta etapa.
+
+`player.applyCharacter(character)` aplica o nome e o visual a `avatar.appearance`.
+`player/appearance.js` usa materiais e geometrias privados, preserva pesos/índices
+de skinning e animações, e prende acessórios ao osso da cabeça. Atualizações alcançam
+o material padrão e seu equivalente toon. `player.createCharacterPreview(container)`
+cria uma cópia independente do rig com palco e OrbitControls; `show(appearance)` e
+`stop()` só renderizam enquanto o painel está aberto. A cidade continua sem render
+durante o menu opaco.
+
+`player.setHolstered(bool)` sincroniza a câmera com o estado da arma por
+`updateWeapon(gun, state)`, inclusive ao selecionar uma arma ou pegar outra no chão.
+`player.yaw` descreve a direção do corpo independentemente da órbita desarmada;
+`zoomOrbit(deltaPixels)`, `orbitDistance` e `cameraReturning` expõem o zoom e o retorno.
+O scroll desarmado precede a troca de perspectiva; no toque, dois dedos à direita
+ajustam a distância sem roubar o analógico. Reequipar interpola a rotação e o
+afastamento por 0,48 s, restaura a perspectiva anterior e mantém a varredura de
+colisão da câmera. A AWP conserva o controle de zoom do escopo quando equipada.
+
 O módulo de paintball conecta o gatilho/mira ao personagem por essa API e expõe
 `setTrigger(bool)`, `setWeapon(id)`, `setHolstered(bool)`, `setAiming(bool)`, `resetInput()` e `clearEffects()`; a UI usa o
 personagem para pulo e voo. `getCameraMode()` permite distinguir a mira comum da AWP

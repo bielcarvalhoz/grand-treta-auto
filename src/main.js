@@ -31,6 +31,7 @@ async function main() {
   await frontMenu.introFinished;
 
   const game = createGame({ quality: detectQuality(frontMenu.settings), settings: frontMenu.settings, audio: frontMenu.audio, debug, status: loading.status, container: document.getElementById('app') });
+  game.characters = frontMenu.characters;
 
   const campus = createCampusPlugin(game, campusGeo);
   game.map = await buildMap(game, { data: mapData, plugins: [campus] });

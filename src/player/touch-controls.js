@@ -10,8 +10,8 @@ export function joystickVector(dx, dy, radius = 52, deadZone = .12) {
 
 /** Each pointer owns one role until release: left movement and remaining look.
  * UI buttons sit outside the canvas and never start a movement/look gesture. */
-export function createTouchControls(dom, { isActive, onLook, onStick, onDoubleTap = () => {} }) {
-  let stick = null, look = null, lastTap = null, fire = null;
+export function createTouchControls(dom, { isActive, onLook, onStick, onDoubleTap = () => {}, canPinch = () => false, onPinch = () => {} }) {
+  let stick = null, look = null, lastTap = null, fire = null, pinch = null, pinchDistance = 0;
   const sensitivity = () => Math.PI * 1.1 / Math.max(1, Math.min(innerWidth, innerHeight * 1.5));
   const emitStick = (dx = 0, dy = 0) => {
     const v = joystickVector(dx, dy);
@@ -23,7 +23,7 @@ export function createTouchControls(dom, { isActive, onLook, onStick, onDoubleTa
     if (previous) { previous.onFire(false); release(previous.id, previous.button); }
   };
   const reset = () => {
-    const ids = [stick?.id, look?.id]; stick = look = lastTap = null; emitStick();
+    const ids = [stick?.id, look?.id, pinch?.id]; stick = look = lastTap = pinch = null; pinchDistance = 0; emitStick();
     releaseFire();
     ids.forEach(id => { if (id !== undefined) release(id); });
   };
@@ -34,14 +34,23 @@ export function createTouchControls(dom, { isActive, onLook, onStick, onDoubleTa
       if (stick) return;
       stick = { id: e.pointerId, x: e.clientX, y: e.clientY }; emitStick();
     } else {
-      if (look) return;
-      look = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, time: performance.now() };
+      if (look) {
+        if (pinch || !canPinch()) return;
+        pinch = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        look.moved = Infinity; lastTap = null; pinchDistance = Math.hypot(look.x - pinch.x, look.y - pinch.y);
+      } else look = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, time: performance.now() };
     }
     dom.setPointerCapture?.(e.pointerId); e.preventDefault();
   });
   dom.addEventListener('pointermove', e => {
     if (!isActive()) return;
-    if (e.pointerId === stick?.id) {
+    if (pinch && (e.pointerId === look?.id || e.pointerId === pinch.id)) {
+      const pointer = e.pointerId === pinch.id ? pinch : look;
+      pointer.x = e.clientX; pointer.y = e.clientY;
+      const distance = Math.hypot(look.x - pinch.x, look.y - pinch.y);
+      if (canPinch() && distance > 2 && pinchDistance > 2) onPinch(pinchDistance / distance);
+      pinchDistance = distance; e.preventDefault();
+    } else if (e.pointerId === stick?.id) {
       emitStick(e.clientX - stick.x, e.clientY - stick.y); e.preventDefault();
     } else if (e.pointerId === look?.id) {
       const dx = e.clientX - look.x, dy = e.clientY - look.y;
@@ -51,10 +60,11 @@ export function createTouchControls(dom, { isActive, onLook, onStick, onDoubleTa
     }
   });
   const end = e => {
+    if (e.pointerId === pinch?.id) { pinch = null; pinchDistance = 0; }
     if (e.pointerId === stick?.id) { stick = null; emitStick(); }
     if (e.pointerId === look?.id) {
       const now = performance.now(), tap = e.type === 'pointerup' && now - look.time < 260 && look.moved < 14;
-      look = null;
+      look = pinch ? { ...pinch, moved: Infinity, time: now } : null; pinch = null; pinchDistance = 0;
       if (tap && lastTap && now - lastTap.time < 340 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 60) {
         lastTap = null; onDoubleTap();
       } else lastTap = tap ? { time: now, x: e.clientX, y: e.clientY } : null;
@@ -67,13 +77,18 @@ export function createTouchControls(dom, { isActive, onLook, onStick, onDoubleTa
   // lost pointer capture. A new primary touch means no previous touch is alive.
   for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, end, true);
   window.addEventListener('pointerdown', e => {
-    if (e.pointerType === 'touch' && e.isPrimary && (stick || look || fire)) reset();
+    if (e.pointerType === 'touch' && e.isPrimary && (stick || look || fire || pinch)) reset();
   }, true);
   window.addEventListener('blur', reset);
   window.addEventListener('resize', reset);
   document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
   return {
     reset,
+    cancelPinch() {
+      const id = pinch?.id; pinch = null; pinchDistance = 0; lastTap = null;
+      if (look) look.moved = Infinity;
+      if (id !== undefined) release(id);
+    },
     // Fire owns its own pointer/capture: a thumb can aim and shoot together,
     // with an independent movement finger and optional third look finger.
     bindFireButton(button, onFire) {

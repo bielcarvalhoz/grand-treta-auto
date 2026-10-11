@@ -1,5 +1,6 @@
 import { createPlayer } from './controller.js';
 import { loadPlayerAvatar } from './avatar.js';
+import { createCharacterPreview } from './character-preview.js';
 
 // API pública do PERSONAGEM. Outros módulos importam SÓ daqui.
 // Controle em primeira pessoa (teclado/mouse e toque). Não conhece o mapa por dentro:
@@ -41,7 +42,15 @@ export function createPlayerModule(game) {
     player.avatar = avatar;
     return avatar;
   });
-  player.updateWeapon = (gun, state) => player.avatar?.updateWeapon(gun, state) || false;
+  player.updateWeapon = (gun, state) => {
+    player.setHolstered(!!state?.holstered);
+    return player.avatar?.updateWeapon(gun, state) || false;
+  };
+  player.applyCharacter = character => {
+    player.character = character;
+    player.avatar.appearance.apply(character.appearance); player.avatar.update(0);
+  };
+  player.createCharacterPreview = container => createCharacterPreview(player.avatar, container);
 
   game.input.bind('KeyF', () => setTimeout(() => game.toast(player.fly ? 'Voo livre (E sobe, Control desce, Shift acelera)' : 'Andando'), 0), { label: 'voo livre' });
   return player;

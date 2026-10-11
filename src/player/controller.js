@@ -32,6 +32,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   let focusedAim = false;
   let crouched = false;
   let weaponWheelOpen = false;
+  let holstered = false, bodyYaw = 0, orbitDistance = 3.15, armedMode = 'third', armedPitch = 0, returning = null;
   const locomotion = { speed: 0, distance: 0, totalDistance: 0, phase: 0, gait: 'idle', foot: 0 };
 
   // Estado "jogando": pointer lock, modo arrastar (pointer lock bloqueado) ou modo toque
@@ -41,7 +42,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   const setActive = (v) => {
     if (active === v) return;
     active = v;
-    if (!v) { keys.clear(); touchControls.reset(); focusedAim = weaponWheelOpen = false; controls.pointerSpeed = 1; }
+    if (!v) { keys.clear(); touchControls.reset(); focusedAim = weaponWheelOpen = false; syncPointerSpeed(); }
     events.dispatchEvent(new CustomEvent(v ? 'lock' : 'unlock', { detail: { dragMode: mode === 'drag', touch: mode === 'touch' } }));
   };
   controls.addEventListener('lock', () => { mode = 'mouse'; setActive(true); });
@@ -74,7 +75,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   // ---------------------------------------------------------------- olhar arrastando
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   const look = (dx, dy, k) => {
-    if (weaponWheelOpen) return;
+    if (weaponWheelOpen || returning) return;
     euler.setFromQuaternion(camera.quaternion);
     const scale = focusedAim ? .52 : 1;
     euler.y -= dx * k * scale;
@@ -85,6 +86,8 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   let stickX = 0, stickY = 0;
   const touchControls = createTouchControls(dom, {
     isActive: () => active && mode === 'touch', onLook: look,
+    canPinch: () => holstered && cameraMode === 'third' && !weaponWheelOpen && canAct(),
+    onPinch: ratio => zoomOrbit(Math.log(ratio) / .0015),
     onStick(state) {
       stickX = state.x; stickY = state.y;
       events.dispatchEvent(new CustomEvent('joystick', { detail: state }));
@@ -172,17 +175,27 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     onGround = true;
     Object.assign(locomotion, { speed: 0, distance: 0, totalDistance: 0, phase: 0, gait: 'idle', foot: 0 });
     camera.rotation.set(0, yaw, 0, 'YXZ');
+    bodyYaw = yaw; returning = null; syncPointerSpeed();
     updateCamera();
   }
 
   // Sweep a small camera volume from the eyes to the shoulder view. This uses
   // the same obstacle and terrain queries as movement, including training mode.
-  const cameraOffset = new THREE.Vector3(), sample = new THREE.Vector3();
+  const cameraOffset = new THREE.Vector3(), sample = new THREE.Vector3(), returnTarget = new THREE.Quaternion();
   function updateCamera() {
     eyePosition.copy(feet).y += crouched ? CROUCH_EYE : EYE;
     camera.position.copy(eyePosition);
     if (cameraMode === 'first') return;
-    cameraOffset.set(.48, .12, focusedAim ? 2.05 : 3.15).applyQuaternion(camera.quaternion);
+    if (holstered) {
+      euler.setFromQuaternion(camera.quaternion); euler.x = THREE.MathUtils.clamp(euler.x, -1.2, 1.2); camera.quaternion.setFromEuler(euler);
+      cameraOffset.set(0, .12, orbitDistance);
+    } else if (returning) {
+      const t = THREE.MathUtils.smoothstep(returning.elapsed, 0, .48);
+      returnTarget.setFromEuler(new THREE.Euler(armedPitch, bodyYaw, 0, 'YXZ'));
+      camera.quaternion.slerpQuaternions(returning.rotation, returnTarget, t);
+      cameraOffset.copy(returning.offset).lerp(armedMode === 'first' ? sample.set(0, 0, 0) : sample.set(.48, .12, focusedAim ? 2.05 : 3.15), t);
+    } else cameraOffset.set(.48, .12, focusedAim ? 2.05 : 3.15);
+    cameraOffset.applyQuaternion(camera.quaternion);
     const steps = Math.ceil(cameraOffset.length() / .12);
     let clear = 0;
     for (let i = 1; i <= steps; i++) {
@@ -194,8 +207,32 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     camera.position.addScaledVector(cameraOffset, clear);
   }
 
+  function syncPointerSpeed() { controls.pointerSpeed = weaponWheelOpen || returning ? 0 : focusedAim ? .52 : 1; }
+  function setHolstered(value) {
+    const next = !!value;
+    if (next === holstered) return holstered;
+    euler.setFromQuaternion(camera.quaternion);
+    if (next) {
+      if (!returning) { armedMode = cameraMode; armedPitch = euler.x; bodyYaw = euler.y; }
+      returning = null; orbitDistance = 3.15; holstered = true;
+      if (cameraMode !== 'third') setCameraMode('third');
+    } else {
+      holstered = false;
+      if (cameraMode === 'third') returning = { elapsed: 0, rotation: camera.quaternion.clone(), offset: new THREE.Vector3(0, .12, orbitDistance) };
+    }
+    touchControls.cancelPinch(); syncPointerSpeed(); updateCamera();
+    events.dispatchEvent(new CustomEvent('holster', { detail: { holstered } }));
+    return holstered;
+  }
+  function zoomOrbit(delta) {
+    if (!active || !canAct() || !holstered || cameraMode !== 'third' || weaponWheelOpen || !Number.isFinite(delta)) return false;
+    orbitDistance = THREE.MathUtils.clamp(orbitDistance * Math.exp(THREE.MathUtils.clamp(delta * .0015, -2, 2)), 1.05, 8);
+    updateCamera(); return true;
+  }
+
   function setCameraMode(value) {
     if (value !== 'first' && value !== 'third') return cameraMode;
+    if (returning) { returning = null; camera.quaternion.setFromEuler(new THREE.Euler(armedPitch, bodyYaw, 0, 'YXZ')); syncPointerSpeed(); }
     cameraMode = value;
     updateCamera();
     events.dispatchEvent(new CustomEvent('cameramode', { detail: { mode: value } }));
@@ -294,6 +331,15 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     if (!wasGrounded && onGround && !flying && fallSpeed > 1) {
       events.dispatchEvent(new CustomEvent('land', { detail: { speed: fallSpeed, position: feet.clone() } }));
     }
+    if (holstered && cameraMode === 'third' && locomotion.speed > .15) bodyYaw = Math.atan2(-velocity.x, -velocity.z);
+    if (returning) {
+      returning.elapsed += dt;
+      if (returning.elapsed >= .48) {
+        camera.quaternion.setFromEuler(new THREE.Euler(armedPitch, bodyYaw, 0, 'YXZ'));
+        returning = null; cameraMode = armedMode; syncPointerSpeed();
+        events.dispatchEvent(new CustomEvent('cameramode', { detail: { mode: cameraMode } }));
+      }
+    }
     updateCamera();
   }
 
@@ -309,14 +355,16 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     locomotion,
     updateCamera,
     setCameraMode,
+    setHolstered,
+    zoomOrbit,
     toggleCameraMode: () => setCameraMode(cameraMode === 'first' ? 'third' : 'first'),
     getShotOrigin: target => target.copy(eyePosition),
     toggleAutoFly,
     setCrouched,
     toggleCrouch: () => setCrouched(!crouched),
     jump,
-    setFocusedAim(value) { focusedAim = active && !!value; controls.pointerSpeed = weaponWheelOpen ? 0 : focusedAim ? .52 : 1; },
-    setWeaponWheelOpen(value) { weaponWheelOpen = active && !!value; controls.pointerSpeed = weaponWheelOpen ? 0 : focusedAim ? .52 : 1; dragging = false; },
+    setFocusedAim(value) { focusedAim = active && !!value; syncPointerSpeed(); },
+    setWeaponWheelOpen(value) { weaponWheelOpen = active && !!value; syncPointerSpeed(); dragging = false; },
     bindFireButton: touchControls.bindFireButton,
     releasePointerForUI() {
       keys.clear(); dragging = false; touchControls.reset();
@@ -330,6 +378,9 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     get crouched() { return crouched; },
     get weaponWheelOpen() { return weaponWheelOpen; },
     get cameraMode() { return cameraMode; },
-    get yaw() { const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); return e.y; },
+    get holstered() { return holstered; },
+    get orbitDistance() { return orbitDistance; },
+    get cameraReturning() { return !!returning; },
+    get yaw() { if ((holstered && cameraMode === 'third') || returning) return bodyYaw; return new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ').y; },
   };
 }

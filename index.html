@@ -26,10 +26,17 @@
         </div>
         <nav class="menu-options" aria-label="Menu principal">
           <span class="menu-location">OSASCO / SÃO PAULO</span>
-          <button id="play" disabled aria-describedby="loading-text"><b>Campanha</b></button>
+          <button id="play" disabled aria-describedby="loading-text"><b>Modo treta</b></button>
           <button id="training" disabled aria-describedby="loading-text"><b>Modo treino</b></button>
           <button id="tour" disabled aria-describedby="loading-text"><b>Modo tour</b></button>
+          <button id="characters-open" disabled aria-describedby="loading-text"><b>Personagens</b></button>
           <button id="settings-open"><b>Configurações</b></button>
+        </nav>
+        <nav id="treta-menu" class="menu-options hidden" aria-label="Modo treta">
+          <span class="menu-location">MODO TRETA / ESCOLHA COMO JOGAR</span>
+          <button id="treta-single"><b>Um jogador</b><small>A treta atual, do seu jeito.</small></button>
+          <button id="treta-multi" disabled aria-describedby="multiplayer-soon"><b>Multijogador</b><small id="multiplayer-soon">Em breve · suporte na próxima atualização</small></button>
+          <button id="treta-back"><b>Voltar</b></button>
         </nav>
         <section id="settings-panel" class="hidden" aria-label="Configurações">
           <h2>Configurações</h2>
@@ -42,7 +49,7 @@
           <p class="setting-note">Áudio e câmera mudam na hora. Gráficos e entorno exigem recarregar a cidade. Você será avisado antes de aplicar.</p>
           <div class="settings-actions"><button id="settings-back">Voltar</button><button id="settings-apply">Aplicar</button></div>
           <details class="menu-help"><summary>Controles</summary>
-            <p>WASD: andar · Mouse: olhar · Clique/segurar: atacar · Botão direito: mira focada · Segure Q, escolha e solte: roda de armas · E: pegar arma · Z: desarmar/equipar novamente · C: agachar/levantar · V: cor da tinta · X: câmera · Shift: correr · Espaço: pular · F: voar · E/Control em voo: subir/descer · M: mapa · Esc: menu</p>
+            <p>WASD: andar · Mouse: olhar · Clique/segurar: atacar · Botão direito: mira focada · Segure Q, escolha e solte: roda de armas · E: pegar arma · Z: desarmar/equipar novamente · Desarmado: mouse/arraste orbita; scroll ou pinça à direita dá zoom · C: agachar/levantar · V: cor da tinta · X: câmera · Shift: correr · Espaço: pular · F: voar · E/Control em voo: subir/descer · M: mapa · Esc: menu</p>
             <p>No celular: analógico à esquerda (avance até o limite para correr); arraste à direita para mirar. Use os botões ao lado da tinta para desarmar e agachar. Agachado, continue usando o analógico para andar. Segure e arraste o botão de ataque para atacar e mirar juntos. Segure o botão da arma, arraste na direção da opção ou use o analógico e solte para equipar. Você carrega 2 armas de fogo e 1 melee; os socos estão sempre disponíveis. Aproxime-se de uma arma no chão e toque em Pegar para substituir o slot indicado. Jogue em pé ou deitado.</p>
             <div class="places-title">Portarias</div><ul id="places-list" class="controls places"></ul>
           </details>
@@ -51,7 +58,7 @@
         <div id="loading" role="status" aria-live="polite">
           <div class="progress-label"><span id="loading-text">Preparando a cidade…</span><b data-progress-label>0%</b></div>
           <div class="load-track" data-load-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Carregamento da cidade"><span class="load-fill"></span></div>
-          <small>Campanha, treino e tour liberam quando o carregamento terminar.</small>
+          <small>Treta, treino e tour liberam quando o carregamento terminar.</small>
         </div>
       </main>
       <button id="intro-skip">Pular abertura ›</button>
@@ -60,6 +67,16 @@
     <dialog id="settings-restart" aria-labelledby="restart-title" aria-describedby="restart-description">
       <h2 id="restart-title">Recarregar a cidade?</h2><p id="restart-description"></p>
       <div class="settings-actions"><button id="settings-cancel-restart" autofocus>Continuar como está</button><button id="settings-confirm-restart">Aplicar e recarregar</button></div>
+    </dialog>
+
+    <dialog id="character-panel" aria-labelledby="character-title" aria-describedby="character-description">
+      <header class="character-header"><div><span class="eyebrow">CITY OF GOD / PERSONAGENS</span><h2 id="character-title">Seus personagens</h2><p id="character-description">Escolha um personagem ou crie o seu.</p></div><button id="character-close" aria-label="Voltar ao menu">✕</button></header>
+      <div class="character-layout">
+        <aside class="character-roster"><h3>Seu elenco</h3><div id="character-list" role="group" aria-label="Personagens salvos"></div><button id="character-new">+ Criar personagem</button><button id="character-edit" disabled>Editar visual e nome</button><p>Salvos neste navegador.</p></aside>
+        <section class="character-stage" aria-label="Visual do personagem"><div id="character-preview"></div><div class="character-preview-caption"><b id="character-preview-name">Sato</b><span>Arraste para girar · Scroll ou pinça para zoom</span></div></section>
+        <form id="character-editor" hidden><label class="character-name-label" for="character-name">Nome do personagem<input id="character-name" name="name" maxlength="24" required placeholder="Como vão te chamar?" autocomplete="off" /></label><div id="character-fields"></div></form>
+      </div>
+      <footer class="character-footer"><p id="character-status" role="status" aria-live="polite">Selecione um personagem para continuar.</p><div id="character-edit-actions" class="character-edit-actions" hidden><button id="character-edit-cancel" type="button">Cancelar edição</button><button id="character-save" type="submit" form="character-editor">Salvar personagem</button></div><button id="character-confirm" disabled>Usar personagem</button></footer>
     </dialog>
 
     <div id="tour-markers" class="hidden" aria-label="Pontos da cidade"></div>
@@ -105,7 +122,7 @@
 
     <div id="map-panel">
       <canvas id="bigmap"></canvas>
-      <div class="map-heading"><b>CIDADE DE DEUS</b><span id="map-mode-label">MAPA DA CAMPANHA</span></div>
+      <div class="map-heading"><b>CIDADE DE DEUS</b><span id="map-mode-label">MAPA DA TRETA</span></div>
       <div id="map-places" aria-label="Pontos do mapa"></div>
       <div class="map-tools"><button id="map-zoom-in" aria-label="Aumentar zoom">+</button><button id="map-zoom-out" aria-label="Diminuir zoom">−</button><button id="map-reset">Visão ampla</button></div>
       <div class="map-help" id="map-help">Arraste para navegar · Roda ou dois dedos para zoom · Selecione um ponto</div>
