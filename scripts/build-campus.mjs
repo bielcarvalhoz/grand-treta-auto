@@ -75,7 +75,7 @@ B('b17', {
   volumes: [{ from: 0.06, to: 0.94, w: 0.9, height: 37, wall: '#eef2f6', windows: '#3c78c8', roof: '#c9cdd2' }],
   sign: { vol: 0, text: 'BRADESCO' }, antenna: { vol: 0 },
 });
-B('b34', { name: 'Agência CdD', num: 20, levels: 1, height: 6, wall: '#f4f3ef', roof: '#d8d9d9', windows: '#2b3f55', accent: 'quina', accentColor: RED, flag: true });
+B('b34', { name: 'Agência CdD', num: 20, levels: 1, height: 6, wall: '#f4f3ef', roof: '#d8d9d9', windows: '#2b3f55', accent: 'quina', accentColor: RED, flag: true, flagAt: [-23.5463545, -46.7721162] });   // mastro na calçada rente à Portaria 10
 // Fundação Bradesco — Unid. II (bloco com pátio interno + alas)
 poly({ kind: 'building', source: SRC_SAT, name: 'Fundação Bradesco — Unid. II', num: 21, levels: 3, height: 11, style: 'school', wall: '#f3efe6', roof: '#c9622f', roofShape: 'hip', windows: '#33475b' },
   ringLL([[-23.5450471, -46.7717664], [-23.5452057, -46.7713306], [-23.5455081, -46.771392], [-23.5454823, -46.7718056]]),
@@ -148,8 +148,10 @@ const parque = plan.gramados.filter((g) => distM(centroid(g), [-46.7706, -23.547
 poly({ kind: 'monkeyPark', source: SRC_PLAN, name: 'Parque dos Macacos', num: 12 }, parque);
 
 // ---------------------------------------------------------------- portarias (planta oficial + OSM)
-point({ kind: 'gate', type: 'portaria', name: 'Portaria Bussocaba', num: 10 }, [-23.546572, -46.772295]);
-point({ kind: 'gate', type: 'portaria', name: 'Portaria Bussocaba', num: 10, booth: false }, [-23.546337, -46.772194]);
+// Bussocaba: as duas pistas (entrada e saída) passam sob UMA cobertura; pontos onde a cruzam.
+// (reach: o vão do muro fica só sob a cobertura; o pátio da frente é aberto para a rua)
+point({ kind: 'gate', type: 'portaria', name: 'Portaria Bussocaba', num: 10, reach: 8 }, [-23.5466816, -46.7721977]);
+point({ kind: 'gate', type: 'portaria', name: 'Portaria Bussocaba', num: 10, booth: false, reach: 8 }, [-23.5466081, -46.7720745]);
 point({ kind: 'gate', type: 'pedestre', name: 'Portaria Bussocaba (pedestres)', num: 6 }, [-23.547431, -46.773729]);
 point({ kind: 'gate', type: 'pedestre', name: 'Portaria Goiabinha (pedestres)', num: 7 }, [-23.5498934, -46.7739968]);
 point({ kind: 'gate', type: 'portaria', name: 'Portaria Wenceslau Braz', num: 8, building: true }, [-23.550003, -46.771147]);
@@ -167,11 +169,54 @@ line({ kind: 'stairway', id: 'escadaria-mata', name: 'Escadaria da mata', source
   [-23.5465629, -46.7716002], [-23.5465874, -46.7716887], [-23.5466627, -46.7717288],
 ]);
 // Passarela de grades verdes do pé da escada até a via da Portaria Bussocaba.
-line({ kind: 'walkway', id: 'passarela-agencia', from: 'escadaria-mata', source: SRC_FIELD, width: 2.2 }, [[-23.5466627, -46.7717288], [-23.54673, -46.771962]]);
+// (termina na calçada bege do lado de dentro da Portaria Bussocaba, rente à Agência)
+line({ kind: 'walkway', id: 'passarela-agencia', from: 'escadaria-mata', source: SRC_FIELD, width: 2.2, endLift: .41 }, [[-23.5466627, -46.7717288], [-23.5467057, -46.7718605]]);
 // Locomotiva 801 ao lado do CTI: frente (limpa-trilhos) para ESE, trilho de exposição de 26 m.
 point({ kind: 'landmark', type: 'locomotiva', name: 'Locomotiva 801', source: SRC_FIELD, heading: 113 }, [-23.546803, -46.768288]);
-// Portaria Bussocaba: UMA cobertura dupla sobre as duas pistas (vista aérea do usuário), junto à Agência.
-point({ kind: 'landmark', type: 'portaria', gate: 10, name: 'Portaria Bussocaba', heading: 90, width: 27, depth: 10.5, source: SRC_FIELD }, [-23.5466349, -46.7721482]);
+// Portaria Bussocaba: UMA cobertura comprida (duas lajes em linha, 35 x 12 m) paralela à rua, junto à
+// Agência. Centro, rumo do eixo (57°, para o lado da Agência) e tamanho medidos em vista de topo do
+// Google Earth; as pistas de entrada e de saída passam por baixo, perpendiculares a ela.
+// Sob a cobertura, da ponta sudoeste: recepção, pedestres, pista de entrada (uma faixa), ilha da
+// guarita, pista de saída (duas faixas) e pedestres ao lado da Agência — conforme as fotos aéreas
+// anotadas pelo usuário (contorno das vias em vermelho, entradas de pedestres em verde).
+// Tudo em metros no sistema da cobertura: s ao longo dela a partir da ponta sudoeste, v para DENTRO do
+// campus. Medido em vistas de topo do Google Earth a 30 m (grade do jogo sobreposta). Num ponto,
+// v = null quer dizer "no meio-fio da rua" e v = 'interna' "na calçada da rua interna"; um 3º
+// valor é a altura do piso acima do chão (rampa/guia rebaixada).
+point({ kind: 'landmark', type: 'portaria', gate: 10, name: 'Portaria Bussocaba', heading: 57, length: 35, depth: 12, entrada: 'way/837879887', saida: 'way/837879888', larguraSaida: 8,
+  recepcao: [1.6, 5.6], pistas: [[9.4, 13.4], [18.1, 31.9]], pedestres: [{ s: 6.65, w: 2.1, simples: true }, { s: 34, w: 3.4 }], guarita: [13.9, 17.7, 2, 11.1], muro: [[37.5, 0]],
+  // eixos das duas pistas, da rua para dentro (entre os nós de ligação do OSM)
+  eixoEntrada: [[6.6, -16.2], [9.3, -12], [11.2, -8.3], [11.4, -6], [11.4, 9], [10.4, 13], [8, 15.9]],
+  eixoSaida: [[30.5, -34], [30.6, -28], [29.1, -17], [25, -9], [25, 7], [23.2, 13], [22.4, 19]],
+  // ---- lado da rua: canteiro em meia-lua na frente da recepção e a calçada em leque em volta dele,
+  // que vai do passeio da rua até a passagem de pedestres (guia do lado da pista de entrada)
+  canteiro: [3.2, -6.2, 2.9],
+  leque: { dentro: [[6.25, -6.2], [5.84, -7.73], [4.73, -8.84], [3.2, -9.25], [1.68, -8.84], [.56, -7.73, .3], [-1.2, -8.5, .04]],
+    fora: [[7.7, -6.2], [7.7, -8.4], [6.3, -10.4], [3.6, null, .25], [1, null, .25], [-1.5, null, .2], [-3.5, null, .04]], guia: 4 },   // guia: nº de pontos de fora do lado da pista
+  // nariz em crescente da ilha da guarita, apontando para a boca de entrada
+  nariz: { baixo: [[13.5, -8.6], [12.6, -11.2]], alto: [[16.8, -9.2], [14.6, -11.8]], ponta: [11.4, -13.5] },
+  // ilha da árvore entre as duas bocas: nariz redondo [s, v, raio] e o contorno até o meio-fio
+  ilha: [21.4, -18.7, 3.2], ilhaContorno: [[19.5, null], [18.2, -18.87], [18.55, -17.25], [19.66, -16.02], [21.23, -15.5], [22.85, -15.85], [24.08, -16.96], [26.1, null]],
+  // calçada rente à Agência, da rua até a passagem de pedestres nordeste (guia do lado das pistas de saída)
+  calcadaRua: { esquerda: [[32.2, -6], [33, -12], [34, -20], [35, -28], [35.35, -31.8, .26], [35.6, null, .12]], direita: [[37.3, -6], [37.3, -12], [37.3, -20], [37.3, -28], [37.3, -32, .3], [37.3, null, .04]] },
+  // faixas de pedestres nas duas bocas (trechos de s ao longo do meio-fio) e linhas de tachões
+  faixasBoca: [[3.9, 19.3], [26.3, 35.3]],
+  tachoes: [[[6.1, -12.3], [8.4, -10.6], [9.3, -8.6], [9.4, -6]], [[13.7, -15.8], [18.3, -12.4], [19, -11.2], [20.95, -5.9]], [[24.5, -5.8], [24.3, -12.7]], [[28.1, -5.5], [29.7, -14.9]]],
+  // abrigo com banco na ilha da árvore, onde se espera o táxi [s no meio-fio, comprimento], e a vaga dos
+  // táxis rente a ela [s0, s1] (informados pelo usuário; posição exata estimada)
+  abrigoTaxi: [22.8, 3.2], vagaTaxi: [19.9, 25.7],
+  // ---- lado de dentro: pátio de asfalto de s = 0 a 32,2;
+  // calçada dos fundos da recepção, com a guia em curva marcada pelo usuário na vista de topo (da calçada
+  // da rua interna até a passagem de pedestres; 'guia' = no meio-fio da rua interna); calçada com degraus rente à Agência, da passagem
+  // nordeste até a calçada da rua interna; faixa de pedestres dela até o outro lado da rua [v0, v1, s inicial]
+  patio: [0, 32.2],
+  // (duas curvas [início, controle, fim]: a guia do lado do pátio e a borda do lado do gramado)
+  calcadaFundos: { fora: [[7.7, 6], [7.4, 13.9], [0, 'guia']], dentro: [[0, 6], [-4, 6.5], [-8, 'interna']] },
+  // caminhão dos bombeiros que costuma ficar parado ao lado da ponta sudoeste [s, v do centro] (informado pelo usuário)
+  caminhaoBombeiro: [-5.6, 1.4],
+  calcadaAgencia: { esquerda: [[32.2, 6], [32.2, 13], [32.2, 20], [32.2, 27], [32.2, 'interna']], direita: [[37.3, 6], [37.3, 13], [37.2, 21.5], [36.7, 27], [36.5, 'interna']] },
+  faixaInterna: [26.9, 30.5, 31.75], degraus: [[32.5, 36.3, 19.5, 27.5, 8]], covas: [[33, 9.5], [35.9, 11.5], [33, 15.5], [35.9, 17.5]],
+  source: SRC_FIELD }, [-23.5466438, -46.7721344]);
 // Beco com escada na ponta leste do Balança (do estacionamento à rua do Prata).
 point({ kind: 'landmark', type: 'beco', building: 'b8', toward: 'b6', end: 'leste', offset: 5.2, width: 2.6, source: SRC_FIELD }, [-23.5479607, -46.7738679]);
 // Entradas do Prata: -2 ao pé da torre da fachada norte; fundos do andar zero na fachada sul.
@@ -199,6 +244,11 @@ plato('estacionamento-balanca', 'Estacionamento do Balança', 734, [
   [-23.5479419, -46.7738336], [-23.5480003, -46.7740100], [-23.5480632, -46.7741962], [-23.5481261, -46.7743922], [-23.5481979, -46.7745881],
   [-23.5482698, -46.7747841], [-23.5482922, -46.7748576], [-23.5482249, -46.7748772],
 ], { band: 10 });
+// Portaria Bussocaba: a cobertura, as pistas sob ela e o pátio até a rua interna num nível só (731 m).
+// (inclui o trecho da rua interna ao longo do pátio, com a calçada do outro lado, e a calçada rente à
+// Agência: ali o SRTM subia 1,4 m por causa das copas e a rua ficava num aterro acima do pátio)
+plato('portaria-bussocaba', 'Portaria Bussocaba', 731, [[-23.5466684, -46.7723916], [-23.5464629, -46.7720464], [-23.546591, -46.7719557], [-23.5465863, -46.7719298], [-23.5469027, -46.7717056],
+  [-23.5469266, -46.7717997], [-23.5468941, -46.7719162], [-23.5468687, -46.7719634], [-23.5468706, -46.7720205], [-23.5468771, -46.7721035], [-23.5469283, -46.7722074]], { band: 6, buildings: ['b34'] });   // a Agência fica no mesmo terraço
 // Rua entre o Balança e o Prata, no nível da laje do Balança (que é estacionamento): 741 m.
 plato('rua-balanca-prata', 'Rua entre o Balança e o Prata', 741, [
   [-23.5479778, -46.7737846], [-23.5480030, -46.7738228], [-23.5480425, -46.7739610], [-23.5480731, -46.7740149], [-23.5480946, -46.7741109],

@@ -82,6 +82,7 @@ export async function buildMap(game, { data, plugins = [] }) {
   await hook('shapeTerrain');
   const renderWorld = renderWorldFor(world, game.settings?.surroundings);
   map.surroundingsEnabled = renderWorld === world;
+  map.renderWorld = renderWorld;   // (quem emenda um piso numa via precisa saber se ela ganha malha 3D)
   if (game.settings?.surroundings === 'fog') {
     scene.fog.near = 350; scene.fog.far = 1400;
   }
@@ -129,7 +130,7 @@ export async function buildMap(game, { data, plugins = [] }) {
   scene.add(map.signals.root);
   map.labels = buildLabels(renderWorld, terrain, { real: map.real });
   scene.add(map.labels.root);
-  map.boundary = buildQuarterBoundary(world.quarter, terrain);
+  map.boundary = buildQuarterBoundary(world.quarter, terrain, world.boundaryOpenings);
   scene.add(map.boundary);
 
   // física: o que o personagem não atravessa e onde ele pisa

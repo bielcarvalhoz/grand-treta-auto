@@ -84,12 +84,16 @@ export function planCampusAmenities(C, world) {
     const key = `${gate.num || ''}:${gate.name}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const frame = gatePedestrianFrame(gate, C), vehicle = gate.type !== 'pedestre';
-    const width = gate.crossing?.r?.w ?? 7, along = vehicle ? 2 : 1.1;
-    const offsets = vehicle ? [-(width / 2 + 1.3), width / 2 + 1.3] : [-.85, .85];
-    const lanes = offsets.map((offset, i) => {
-      const [x, z] = localPoint(frame, offset, along);
-      return { x, z, yaw: frame.yaw, direction: i ? 'saída' : 'entrada', gate: gate.name, num: gate.num, ring: rect({ x, z, yaw: frame.yaw }, 1.25, 2.5) };
+    // portaria de cobertura única: catracas nas passagens de pedestres levantadas em campo
+    const peds = gate.combined ? C.portaria?.pedestrians : null, vehicle = gate.type !== 'pedestre';
+    const frames = peds?.length ? peds.map((p) => ({ x: p.x, z: p.z, tx: p.tx, tz: p.tz, yaw: Math.atan2(p.tx, p.tz), single: p.simples, lift: p.lift })) : [gatePedestrianFrame(gate, C)];
+    const frame = frames[0], width = gate.crossing?.r?.w ?? 7, along = peds?.length ? 0 : vehicle ? 2 : 1.1;
+    const lanes = frames.flatMap((at) => {
+      const offsets = peds?.length ? (at.single ? [0] : [-.85, .85]) : vehicle ? [-(width / 2 + 1.3), width / 2 + 1.3] : [-.85, .85];
+      return offsets.map((offset, i) => {
+        const [x, z] = localPoint(at, offset, along);
+        return { x, z, yaw: at.yaw, direction: i ? 'saída' : 'entrada', gate: gate.name, num: gate.num, lift: at.lift, ring: rect({ x, z, yaw: at.yaw }, 1.25, 2.5) };
+      });
     });
     gates.push({ ...frame, gate, vehicle, lanes, approximate: true });
   }
@@ -207,7 +211,7 @@ export function buildCampusAmenities(C, { renderer, terrain, world, sidewalkHeig
     for (const lane of gate.lanes) {
       const place = { ...lane };
       if (Number.isFinite(pedestrianHeight)) place.y = pedestrianHeight;
-      else pad(place, 1.25, 2.5, .025);
+      else pad(place, 1.25, 2.5, lane.lift ?? .025);   // (lift: piso da passagem de pedestres da portaria)
       box(STEEL, place, -.44, .55, 0, .31, 1.10, 1.02);
       box('#30373b', place, -.44, 1.13, 0, .34, .095, 1.08);
       box(RED, place, -.44, .56, -.525, .29, 1.00, .03);

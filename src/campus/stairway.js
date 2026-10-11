@@ -201,8 +201,13 @@ export function buildStairway(kit, S, { ground, sawtoothFrom = Infinity } = {}) 
       // emenda com a calçada da via
       const lap = [toWorld(frame, r.run, -half), toWorld(frame, r.run + LAP, -half), toWorld(frame, r.run + LAP, half), toWorld(frame, r.run, half)];
       kit.box(C_SLAB, frame, r.run + LAP / 2, r.yb - .3, 0, LAP, .6, r.w); surfaces.push({ rings: [lap], y: r.yb });
-      // lixeiras verdes junto à passarela e a touceira de bambu ao pé da escada
-      for (let k = 0; k < 3; k++) { kit.box(C_BIN, frame, 2.4 + k * .95, r.ya + .55 + (r.yb - r.ya) * (2.4 + k * .95) / r.run, half + .65, .7, 1.1, .75); kit.box('#22262a', frame, 2.4 + k * .95, r.ya + 1.13 + (r.yb - r.ya) * (2.4 + k * .95) / r.run, half + .65, .74, .06, .79); }
+      // lixeiras verdes junto à passarela, sobre uma laje própria apoiada no chão, e a touceira de bambu
+      {
+        const x0 = 1.85, x1 = 4.85, deep = 1.15, pad = [toWorld(frame, x0, half), toWorld(frame, x1, half), toWorld(frame, x1, half + deep), toWorld(frame, x0, half + deep)], y = Math.max(yAt(x0), yAt(x1)), base = floorUnder(pad, y);
+        kit.box(C_SLAB, frame, (x0 + x1) / 2, (y + base) / 2, half + deep / 2, x1 - x0, y - base, deep); surfaces.push({ rings: [pad], y });
+        solids.push({ rings: [[toWorld(frame, 2.0, half + .25), toWorld(frame, 4.7, half + .25), toWorld(frame, 4.7, half + 1.05), toWorld(frame, 2.0, half + 1.05)]], top: y + 1.15, kind: 'lixeiras' });
+      }
+      for (let k = 0; k < 3; k++) { kit.box(C_BIN, frame, 2.4 + k * .95, Math.max(yAt(1.85), yAt(4.85)) + .55, half + .65, .7, 1.1, .75); kit.box('#22262a', frame, 2.4 + k * .95, Math.max(yAt(1.85), yAt(4.85)) + 1.13, half + .65, .74, .06, .79); }
     }
   }
   const foot = S.flights.at(-1);
