@@ -1,5 +1,13 @@
 # Calibração do personagem e física — 2026-10-11
 
+## Ações do personagem
+
+- **Z:** guarda/equipa a arma selecionada, incluindo a guarda de socos. Desarmado usa o idle normal e não ataca; inventário e seleção são preservados.
+- **C:** alterna agachado/em pé. Usa as animações de agachar parado e andar agachado, com câmera mais baixa e velocidade limitada a 1,6 m/s.
+- **V:** troca a cor da tinta (antes ficava em C).
+- No celular, os botões de desarmar e agachar ficam ao lado do botão de tinta; dourado indica ativo.
+- Na campanha, o voo pelo botão/menu ou **F** usa a animação completa de nadar. Entrar em voo levanta o personagem; sair restaura a postura equipada/desarmada. O treino continua sem voo.
+
 ## Usar no celular
 
 1. Abra **`/debug` → Ajustar mãos / armas** (`B` no teclado). A URL entra diretamente no treino e oferece apenas treino/configurações. O treino normal não monta o painel.

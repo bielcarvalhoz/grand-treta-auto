@@ -31,11 +31,12 @@ function setup(run) {
     { id: 'axe', label: 'Machado', kind: 'melee' },
   ];
   const inventory = { slots: ['pistol', 'automatic', 'knife'], lastFirearmSlot: 0 };
-  let selected = weapons[0], resetCount = 0, wheelPlayer = false, pickups = 0;
+  let selected = weapons[0], holstered = false, resetCount = 0, wheelPlayer = false, pickups = 0;
   const paintball = {
     weapons, get weapon() { return selected; }, get inventory() { return { ...inventory, selected: selected.id }; },
     get availableWeapons() { return inventory.slots.map(id => weapons.find(w => w.id === id)).concat(weapons[3]); },
-    setWeapon(id) { selected = weapons.find(w => w.id === id); }, resetInput() { resetCount++; }, setTrigger() {}, aiming: false,
+    get holstered() { return holstered; }, setHolstered(value) { holstered = value; },
+    setWeapon(id) { selected = weapons.find(w => w.id === id); holstered = false; }, resetInput() { resetCount++; }, setTrigger() {}, aiming: false,
   };
   const player = { active: true, events: new EventTarget(), setWeaponWheelOpen: value => { wheelPlayer = value; }, setFocusedAim() {} };
   const game = { mode: 'training', paintball, player, events: createEvents(), input: { bind: (code, handler) => bindings.set(code, handler) },
@@ -52,6 +53,19 @@ test('wheel directions match the four slots and a neutral gesture selects nothin
   assert.equal(weaponWheelIndex(0, 100), 2); assert.equal(weaponWheelIndex(-100, 0), 3);
   assert.equal(weaponWheelIndex(10, 5), null); assert.equal(weaponWheelIndex(0, 0), null);
 });
+
+test('holstering updates the HUD and controls; selecting the retained weapon equips it again', () => setup(s => {
+  s.paintball.setHolstered(true);s.systems.forEach(fn=>fn());
+  assert.equal(s.element('weapon-label').textContent,'DESARMADO');
+  assert.equal(s.element('btn-holster').attributes['aria-pressed'],'true');
+  assert.equal(s.element('btn-fire').disabled,true);assert.equal(s.element('btn-aim').disabled,true);
+  assert.equal(s.element('body').holstered,true);
+  s.key('KeyQ');s.send(window,'mousemove',{movementX:0,movementY:-80});s.send(window,'keyup',{code:'KeyQ'});
+  s.systems.forEach(fn=>fn());
+  assert.equal(s.paintball.weapon.id,'pistol');assert.equal(s.paintball.holstered,false);
+  assert.equal(s.element('weapon-label').textContent,'GLOCK-18');
+  assert.equal(s.element('btn-holster').attributes['aria-pressed'],'false');assert.equal(s.element('btn-fire').disabled,false);
+}));
 
 test('holding Q suppresses input, pointer lock deltas select a weapon only on release', () => setup(s => {
   s.key('KeyQ'); assert.equal(s.wheel.open, true); assert.equal(s.playerOpen, true); assert.ok(s.resets);

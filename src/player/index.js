@@ -5,9 +5,9 @@ import { loadPlayerAvatar } from './avatar.js';
 // Controle em primeira pessoa (teclado/mouse e toque). Não conhece o mapa por dentro:
 // colisões, pisos e telhados vêm de game.physics, preenchido pelo mapa e pelo campus.
 //
-// O objeto devolvido expõe: active, fly, yaw, feet, touchMode, dragMode, events (EventTarget com
-// 'lock', 'unlock', 'fly', 'joystick'), start(touch), stop(), placeAt(x, z, yaw), toggleAutoFly(),
-// jump(), setFocusedAim(bool), bindFireButton(element, onHeld(bool)).
+// O objeto devolvido expõe: active, fly, crouched, yaw, feet, touchMode, dragMode, events (EventTarget com
+// 'lock', 'unlock', 'fly', 'crouch', 'joystick'), start(touch), stop(), placeAt(x, z, yaw), toggleAutoFly(),
+// jump(), setCrouched(bool), toggleCrouch(), setFocusedAim(bool), bindFireButton(element, onHeld(bool)).
 
 export { createPlayer } from './controller.js';
 

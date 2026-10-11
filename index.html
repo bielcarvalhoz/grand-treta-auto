@@ -42,8 +42,8 @@
           <p class="setting-note">Áudio e câmera mudam na hora. Gráficos e entorno exigem recarregar a cidade. Você será avisado antes de aplicar.</p>
           <div class="settings-actions"><button id="settings-back">Voltar</button><button id="settings-apply">Aplicar</button></div>
           <details class="menu-help"><summary>Controles</summary>
-            <p>WASD: andar · Mouse: olhar · Clique/segurar: atacar · Botão direito: mira focada · Segure Q, escolha e solte: roda de armas · E: pegar arma · C: cor · X: câmera · Shift: correr · Espaço: pular · F: voar · E/Control em voo: subir/descer · M: mapa · Esc: menu</p>
-            <p>No celular: analógico à esquerda (avance até o limite para correr); arraste à direita para mirar. Segure e arraste o botão de ataque para atacar e mirar juntos. Segure o botão da arma, arraste na direção da opção ou use o analógico e solte para equipar. Você carrega 2 armas de fogo e 1 melee; os socos estão sempre disponíveis. Aproxime-se de uma arma no chão e toque em Pegar para substituir o slot indicado. Jogue em pé ou deitado.</p>
+            <p>WASD: andar · Mouse: olhar · Clique/segurar: atacar · Botão direito: mira focada · Segure Q, escolha e solte: roda de armas · E: pegar arma · Z: desarmar/equipar novamente · C: agachar/levantar · V: cor da tinta · X: câmera · Shift: correr · Espaço: pular · F: voar · E/Control em voo: subir/descer · M: mapa · Esc: menu</p>
+            <p>No celular: analógico à esquerda (avance até o limite para correr); arraste à direita para mirar. Use os botões ao lado da tinta para desarmar e agachar. Agachado, continue usando o analógico para andar. Segure e arraste o botão de ataque para atacar e mirar juntos. Segure o botão da arma, arraste na direção da opção ou use o analógico e solte para equipar. Você carrega 2 armas de fogo e 1 melee; os socos estão sempre disponíveis. Aproxime-se de uma arma no chão e toque em Pegar para substituir o slot indicado. Jogue em pé ou deitado.</p>
             <div class="places-title">Portarias</div><ul id="places-list" class="controls places"></ul>
           </details>
           <p id="stat-line" class="stats"></p>
@@ -82,7 +82,8 @@
       <div class="hud-top-right"><div class="utility-controls only-touch"><button id="btn-menu" aria-label="Menu"><svg class="control-icon" aria-hidden="true"><use  href="./icons/controls.svg#menu" /></svg></button><button id="btn-map" aria-label="Abrir mapa"><svg class="control-icon" aria-hidden="true"><use  href="./icons/controls.svg#map" /></svg></button></div>
       <canvas id="minimap" width="220" height="220" role="button" tabindex="0" aria-label="Abrir mapa"></canvas></div><button id="desktop-menu" class="desktop-menu">Menu · Esc</button>
       <div id="hud-fps"></div>
-      <button id="btn-color" class="paint-hud" aria-label="Trocar cor da tinta"><svg class="control-icon" aria-hidden="true"><use  href="./icons/controls.svg#color" /></svg><span id="paint-chip"></span><span class="paint-caption">Tinta <b id="paint-label">Vermelho</b></span><small class="only-desktop">C troca</small></button>
+      <button id="btn-color" class="paint-hud" aria-label="Trocar cor da tinta"><svg class="control-icon" aria-hidden="true"><use  href="./icons/controls.svg#color" /></svg><span id="paint-chip"></span><span class="paint-caption">Tinta <b id="paint-label">Vermelho</b></span><small class="only-desktop">V troca</small></button>
+      <div class="character-controls only-touch"><button id="btn-holster" aria-label="Desarmar" aria-pressed="false"><svg class="control-icon" aria-hidden="true"><use href="./icons/controls.svg#holster" /></svg></button><button id="btn-crouch" aria-label="Agachar" aria-pressed="false" title="C · Agachar / levantar"><svg class="control-icon" aria-hidden="true"><use href="./icons/controls.svg#crouch" /></svg></button></div>
       <div class="combat-controls">
         <button id="btn-fire" class="only-touch" aria-label="Segurar para atirar; arrastar para mirar"><svg class="control-icon" aria-hidden="true"><use  href="./icons/controls.svg#fire" /></svg></button>
         <button id="btn-aim" class="only-touch" aria-label="Alternar mira focada" aria-pressed="false"><svg class="control-icon" aria-hidden="true"><use  href="./icons/controls.svg#aim" /></svg></button>
@@ -94,7 +95,7 @@
         <div id="weapon-wheel-ring"><div id="weapon-wheel-options" role="listbox" aria-label="Escolha uma arma pela direção"></div><div class="weapon-wheel-center"><b id="weapon-wheel-title"></b><small id="weapon-wheel-detail"></small></div><i id="weapon-wheel-cursor" aria-hidden="true"></i></div>
         <p>Segure · arraste na direção ou use o analógico · solte para equipar</p><small>↑ Fogo 1 · → Fogo 2 · ↓ Melee · ← Socos</small>
       </div>
-      <div id="help" class="help only-desktop">WASD andar · Segurar: atacar · Botão direito: mira · Segure Q: armas · E pegar · X câmera · F voar · M mapa · H esconder</div>
+      <div id="help" class="help only-desktop">WASD andar · C agachar · Z desarmar · Segurar: atacar · Botão direito: mira · Segure Q: armas · E pegar · V tinta · X câmera · F voar · M mapa · H esconder</div>
       <div id="joystick" hidden aria-hidden="true"><span class="joystick-thumb"></span></div>
       <div id="touch-help" class="help only-touch">Analógico: andar/correr · Segure e arraste TIRO</div>
       <div id="crosshair"></div>

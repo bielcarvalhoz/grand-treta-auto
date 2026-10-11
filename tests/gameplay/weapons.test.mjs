@@ -44,6 +44,37 @@ test('firearm base damage, cadence, pellet count and spread agree with the captu
   }
 });
 
+test('holstering preserves the selected weapon and slots, clears attacks and scope, and keeps existing paint moving', () => {
+  const { scene, camera } = setup(), poses = [];
+  const paint = createPaintball({ scene, camera, colliderRoots: [],
+    updateWeaponPose(gun, state) { poses.push(state); return true; } });
+  paint.pickupWeapon('sniper'); paint.setAiming(true); paint.update(.05); paint.setTrigger(true);
+  assert.equal(paint.stats.projectiles, 1); assert.equal(paint.scoped, true);
+  const inventory = paint.inventory, shots = paint.stats.shots;
+  const ball = paint.root.children.find(child => child.name === 'bolinha-tinta' && child.visible), before = ball.position.clone();
+  paint.setHolstered(true);
+  assert.deepEqual(paint.inventory, inventory); assert.equal(paint.weapon.id, 'sniper');
+  assert.equal(paint.gun.visible, false); assert.equal(paint.firing, false); assert.equal(paint.aiming, false);
+  assert.equal(paint.scoped, false); assert.equal(camera.fov, 70); assert.equal(poses.at(-1).holstered, true);
+  paint.setAiming(true); paint.setTrigger(true); assert.equal(paint.shoot(), false);
+  tick(paint, .2); assert.equal(paint.stats.shots, shots); assert.equal(paint.aiming, false); assert.ok(ball.position.distanceTo(before) > 1);
+  paint.setHolstered(false); assert.equal(paint.gun.visible, true); assert.deepEqual(paint.inventory, inventory);
+  paint.setHolstered(true); paint.setWeapon('fists'); assert.equal(paint.holstered, false, 'selecting a weapon explicitly equips it');
+  paint.dispose();
+});
+
+test('holstering cancels a committed melee impact and revolver preparation', () => {
+  const { scene, camera, wall } = setup(), hits = [], attacks = [];
+  const paint = createPaintball({ scene, camera, colliderRoots: [wall], onImpact: hit => hits.push(hit), onAttack: weapon => attacks.push(weapon.id) });
+  paint.setWeapon('fists'); assert.equal(paint.shoot(), true); assert.deepEqual(attacks, ['fists']);
+  paint.setHolstered(true); tick(paint, .5); assert.equal(hits.length, 0);
+  paint.setHolstered(false); assert.equal(paint.shoot(), true); tick(paint, .2); assert.equal(hits.length, 1);
+  paint.pickupWeapon('revolver'); paint.clearEffects(); assert.equal(paint.shoot(), true);
+  paint.setHolstered(true); tick(paint, .3); assert.equal(paint.stats.shots, 0);
+  paint.setHolstered(false); paint.clearEffects(); assert.equal(paint.shoot(), true); tick(paint, .25);
+  assert.equal(paint.stats.shots, 1); paint.dispose();
+});
+
 test('melee and unarmed attacks hit during the swing and never emit paint or gun audio', () => {
   const { scene, camera, wall } = setup(), hits = [], attacks = [], sounds = [];
   const paint = createPaintball({ scene, camera, colliderRoots: [wall], onImpact: (hit, info) => hits.push(info), onAttack: (weapon, state) => attacks.push([weapon.id, state.sequence]), onShot: id => sounds.push(id) });

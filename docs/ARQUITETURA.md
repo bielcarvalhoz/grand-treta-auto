@@ -39,6 +39,9 @@ e `toggleCameraMode()` alternam a vista e emitem `cameramode` em `player.events`
 `getShotOrigin(target)` escreve em `target` a posição dos olhos, independente da
 posição da câmera em terceira pessoa. `updateWeapon(gun, state)` posiciona a arma
 no mundo pelo encaixe da mão direita; retorna se a pose foi aplicada.
+`setCrouched(bool)`, `toggleCrouch()` e `crouched` controlam a postura; o evento
+`crouch` sincroniza a UI. Agachado, a altura dos olhos é 1,1 m e a velocidade máxima
+é 1,6 m/s, inclusive com analógico, corrida ou mira. Entrar em voo desfaz o agachamento.
 `avatar.poseConfig` expõe `get`, `set`, `reset` e `export`, com posição em metros,
 rotação XYZ em graus e escala XYZ como multiplicador. `player/pose-config.js` mantém
 os encaixes por arma/perspectiva e o enquadramento dos braços por arma na primeira
@@ -53,12 +56,17 @@ encaixe são aplicados depois do enquadramento automático, sem serem anulados p
 `player.releasePointerForUI()` solta o cursor mantendo o treino ativo para desktop.
 
 O módulo de paintball conecta o gatilho/mira ao personagem por essa API e expõe
-`setTrigger(bool)`, `setWeapon(id)`, `setAiming(bool)`, `resetInput()` e `clearEffects()`; a UI usa o
+`setTrigger(bool)`, `setWeapon(id)`, `setHolstered(bool)`, `setAiming(bool)`, `resetInput()` e `clearEffects()`; a UI usa o
 personagem para pulo e voo. `getCameraMode()` permite distinguir a mira comum da AWP
 do escopo em primeira pessoa: `scoped`, `scopeZoom` e `adjustScopeZoom(delta)`
 controlam a ampliação de 2× a 8×. O FOV usa a relação angular da magnificação;
 `updateWeapon(gun, state)` recebe `scoped` para ocultar os braços enquanto o
 encaixe da arma continua atualizado para disparos e colisões. Não há imports novos entre módulos.
+`holstered` guarda a arma selecionada sem alterar o inventário, cancela ataques/mira
+pendentes e bloqueia novos ataques. `Z` alterna esse estado; selecionar uma arma
+explicitamente equipa novamente. Sem guarda, o avatar usa `Idle_Loop` completo
+e os braços ficam fora da vista em primeira pessoa. `C` agacha e `V` troca tinta;
+os botões de desarmar/agachar ficam ao lado da tinta no toque.
 
 `weapons.js` mantém o catálogo e a regra de dois slots de fogo, um melee e socos
 sempre disponíveis. `paintball.inventory` retorna `{slots, selected, lastFirearmSlot}`;
@@ -103,6 +111,11 @@ real e a fase compartilhada `player.locomotion`. Eventos `footstep`, `jump` e `l
 disparam sons de grama/concreto por `core/locomotion-audio.js`, sem passos parado,
 contra obstáculos ou durante o voo. `avatar.playAttack(def, {sequence})` usa
 `Sword_Attack` para melee e alterna `Punch_Jab`/`Punch_Cross` para socos.
+`Crouch_Idle_Loop` e `Crouch_Fwd_Loop` animam o agachamento parado/em movimento.
+O enquadramento em primeira pessoa compensa o deslocamento do quadril para manter
+a guarda visível. Durante qualquer voo, `Swim_Fwd_Loop` toma o corpo inteiro a 1,2×,
+sem sobreposição da guarda, recuo ou correção da cabeça. Ao pousar, a locomoção
+e a postura equipada/desarmada voltam automaticamente.
 Na primeira pessoa, melee usa a guarda frontal original de pistola como base
 e o movimento aditivo dos braços de espada, com amplitude reduzida e ombros
 fora do enquadramento. A guarda fica mais à direita/abaixo, com braços e arma

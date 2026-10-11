@@ -9,6 +9,8 @@ import { GAITS, gaitForSpeed } from './locomotion.js';
 //  botão de tiro permite arrastar a mira enquanto dispara; voo pelo botão ↟.
 
 const EYE = 1.7;
+const CROUCH_EYE = 1.1;
+const CROUCH_SPEED = 1.6;
 const RADIUS = 0.35;
 const GRAVITY = 22;
 const STEP_UP = 0.7;
@@ -27,6 +29,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   let autoFly = false; // voo direcional pelo botão do celular
   let flySpeed = 0;
   let focusedAim = false;
+  let crouched = false;
   let weaponWheelOpen = false;
   const locomotion = { speed: 0, distance: 0, totalDistance: 0, phase: 0, gait: 'idle', foot: 0 };
 
@@ -97,11 +100,22 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
 
   function toggleAutoFly() {
     if (!allowFlight()) return false;
+    setCrouched(false);
     autoFly = !autoFly;
     fly = false;
     vy = 0;
     flySpeed = 0;
     events.dispatchEvent(new CustomEvent('fly', { detail: { flying: autoFly } }));
+  }
+
+  function setCrouched(value) {
+    const next = !!value;
+    if (next && (!active || weaponWheelOpen || fly || autoFly)) return crouched;
+    if (next !== crouched) {
+      crouched = next; updateCamera();
+      events.dispatchEvent(new CustomEvent('crouch', { detail: { crouched } }));
+    }
+    return crouched;
   }
 
   function jump() {
@@ -115,7 +129,10 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   const onKey = (e, down) => {
     if (down) keys.add(e.code); else keys.delete(e.code);
     if (down && e.code === 'Space') jump();
-    if (down && !e.repeat && e.code === 'KeyF' && allowFlight()) { fly = !fly; autoFly = false; vy = 0; }
+    if (down && !e.repeat && e.code === 'KeyF' && allowFlight()) {
+      setCrouched(false); fly = !fly; autoFly = false; vy = 0;
+      events.dispatchEvent(new CustomEvent('fly', { detail: { flying: fly } }));
+    }
   };
   window.addEventListener('keydown', (e) => {
     if (e.target?.closest?.('button, input, select, textarea, [contenteditable=true]')) return;
@@ -141,6 +158,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     if (feet.y > terrain.heightAt(x, z) + 3) feet.y = terrain.heightAt(x, z); // não nascer em telhado
     vy = 0;
     autoFly = fly = false;
+    setCrouched(false);
     velocity.set(0, 0, 0);
     onGround = true;
     Object.assign(locomotion, { speed: 0, distance: 0, totalDistance: 0, phase: 0, gait: 'idle', foot: 0 });
@@ -152,7 +170,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   // the same obstacle and terrain queries as movement, including training mode.
   const cameraOffset = new THREE.Vector3(), sample = new THREE.Vector3();
   function updateCamera() {
-    eyePosition.copy(feet).y += EYE;
+    eyePosition.copy(feet).y += crouched ? CROUCH_EYE : EYE;
     camera.position.copy(eyePosition);
     if (cameraMode === 'first') return;
     cameraOffset.set(.48, .12, focusedAim ? 2.05 : 3.15).applyQuaternion(camera.quaternion);
@@ -188,7 +206,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     // remains a keyboard modifier and does not change analog thumb strength.
     const analog = !keyboardMove && Math.hypot(stickX, stickY) > 0;
     const flying = fly || autoFly;
-    const speed = fly ? (run ? 90 : 28) : focusedAim ? 3.1 : analog || run ? 9.5 : 4.6;
+    const speed = fly ? (run ? 90 : 28) : crouched ? CROUCH_SPEED : focusedAim ? 3.1 : analog || run ? 9.5 : 4.6;
 
     camera.getWorldDirection(fwd);
     move.set(0, 0, 0);
@@ -251,8 +269,8 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     velocity.copy(feet).sub(before).divideScalar(Math.max(dt, 1e-6));
     locomotion.speed = Math.hypot(velocity.x, velocity.z);
     locomotion.distance = onGround && wasGrounded && !flying ? Math.hypot(feet.x - before.x, feet.z - before.z) : 0;
-    locomotion.gait = gaitForSpeed(locomotion.speed);
-    if (locomotion.distance > .00001 && locomotion.gait !== 'idle') {
+    locomotion.gait = gaitForSpeed(locomotion.speed, crouched && !flying);
+    if (locomotion.distance > .00001 && GAITS[locomotion.gait].speed) {
       const gait = GAITS[locomotion.gait], previousPhase = locomotion.phase;
       locomotion.totalDistance += locomotion.distance;
       locomotion.phase += locomotion.distance / (gait.speed * gait.duration);
@@ -285,6 +303,8 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     toggleCameraMode: () => setCameraMode(cameraMode === 'first' ? 'third' : 'first'),
     getShotOrigin: target => target.copy(eyePosition),
     toggleAutoFly,
+    setCrouched,
+    toggleCrouch: () => setCrouched(!crouched),
     jump,
     setFocusedAim(value) { focusedAim = active && !!value; controls.pointerSpeed = weaponWheelOpen ? 0 : focusedAim ? .52 : 1; },
     setWeaponWheelOpen(value) { weaponWheelOpen = active && !!value; controls.pointerSpeed = weaponWheelOpen ? 0 : focusedAim ? .52 : 1; dragging = false; },
@@ -298,6 +318,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     get touchMode() { return mode === 'touch'; },
     get fly() { return fly || autoFly; },
     get grounded() { return onGround; },
+    get crouched() { return crouched; },
     get weaponWheelOpen() { return weaponWheelOpen; },
     get cameraMode() { return cameraMode; },
     get yaw() { const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); return e.y; },
