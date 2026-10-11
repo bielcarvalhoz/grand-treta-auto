@@ -41,7 +41,11 @@ posição da câmera em terceira pessoa. `updateWeapon(gun, state)` posiciona a 
 no mundo pelo encaixe da mão direita; retorna se a pose foi aplicada.
 O módulo de paintball conecta o gatilho/mira ao personagem por essa API e expõe
 `setTrigger(bool)`, `setWeapon(id)`, `setAiming(bool)`, `resetInput()` e `clearEffects()`; a UI usa o
-personagem para pulo e voo. Não há imports novos entre módulos.
+personagem para pulo e voo. `getCameraMode()` permite distinguir a mira comum da AWP
+do escopo em primeira pessoa: `scoped`, `scopeZoom` e `adjustScopeZoom(delta)`
+controlam a ampliação de 2× a 8×. O FOV usa a relação angular da magnificação;
+`updateWeapon(gun, state)` recebe `scoped` para ocultar os braços enquanto o
+encaixe da arma continua atualizado para disparos e colisões. Não há imports novos entre módulos.
 
 `weapons.js` mantém o catálogo e a regra de dois slots de fogo, um melee e socos
 sempre disponíveis. `paintball.inventory` retorna `{slots, selected, lastFirearmSlot}`;
@@ -57,8 +61,9 @@ inventário permanente no HUD.
 `player/avatar.js` mantém um único modelo, esqueleto e materiais para as duas vistas.
 Na primeira pessoa oculta cabeça, tronco e pernas, e gira o rig em torno dos olhos;
 na terceira mantém o corpo em pé. A locomoção anima quadril/pernas enquanto as
-poses originais de pistola animam tronco, braços, punhos e dedos. `playShot()`
-aplica o recuo do clipe original de disparo sobre a pose de mira atual. A arma acompanha a mão direita, e a primeira
+poses originais de pistola animam tronco, braços, punhos e dedos. `playShot(strength = 1)`
+aplica o recuo do clipe original de disparo sobre a pose de mira atual; a Nova usa
+maior amplitude e recuperação mais lenta. A arma acompanha a mão direita, e a primeira
 pessoa enquadra o conjunto de braços/arma sem reescrever rotações das articulações.
 Clipes preservados no GLB podem ser inspecionados com
 `avatar.setPreviewAnimation(name, time)`; a presença de `Pistol_Reload` no arquivo
@@ -71,8 +76,11 @@ de materiais e do warmup. Normaliza escala/eixo e fornece empunhadura e cano par
 `setWeaponModels()`. A seleção da tinta atualiza só os detalhes das armas;
 `keepStandard` preserva seus materiais e o filtro localizado no modo cartoon.
 Na primeira pessoa os ombros ficam atrás do plano próximo da câmera, e o recuo
-aditivo tem peso reduzido para manter o retículo visível. O scroll no canvas ativo
-seleciona primeira pessoa para cima e terceira para baixo, sem interferir no mapa/tour.
+aditivo tem peso reduzido para manter o retículo visível. A mira enquadra cada
+perfil de arma abaixo do retículo. `ui/sniper-scope.js` desenha a abertura circular
+e o retículo da AWP sem exibir arma ou braços. Durante o escopo, o scroll ajusta
+a ampliação; fora dele, seleciona primeira pessoa para cima e terceira para baixo,
+sem interferir no mapa/tour. No toque, botões +/− também ajustam o zoom.
 
 A postura de mira compensa a rotação do quadril na primeira vértebra e acrescenta
 um balanço sutil durante a corrida, movendo a cadeia inteira de braços.
@@ -84,7 +92,8 @@ contra obstáculos ou durante o voo. `avatar.playAttack(def, {sequence})` usa
 `Sword_Attack` para melee e alterna `Punch_Jab`/`Punch_Cross` para socos.
 Na primeira pessoa, melee usa a guarda frontal original de pistola como base
 e o movimento aditivo dos braços de espada, com amplitude reduzida e ombros
-fora do enquadramento. Machado e bastão inclinam para frente para exibir a ponta.
+fora do enquadramento. A guarda fica mais à direita/abaixo, com braços e arma
+reduzidos juntos nessa vista; todas as lâminas e cabos inclinam para frente.
 A terceira pessoa conserva a pose e o golpe de espada completos.
 `player/hair.js` joga pontas e franja para a esquerda do personagem (+X no GLB),
 preservando a nuca e o asset original. A classe `body.playing`, vinculada a lock/unlock do jogador,

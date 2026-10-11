@@ -83,13 +83,51 @@ test('shotgun emits nine damaging pellets per shell, with one sound and bounded 
   paint.dispose();
 });
 
-test('R8 trigger windup can be cancelled and completes one actual firearm event', () => {
+test('R8 accepts a quick mobile tap and completes its windup after normal release', () => {
   const { scene, camera } = setup(), sounds = [];
   const paint = createPaintball({ scene, camera, colliderRoots: [], onShot: id => sounds.push(id) });
-  paint.pickupWeapon('revolver'); paint.setTrigger(true); paint.update(.1); assert.equal(sounds.length, 0);
-  paint.setTrigger(false); tick(paint, .5); assert.equal(sounds.length, 0);
-  paint.setTrigger(true); tick(paint, .22); assert.deepEqual(sounds, ['revolver']);
-  paint.setWeapon('fists'); tick(paint, 1); assert.deepEqual(sounds, ['revolver']);
+  paint.pickupWeapon('revolver'); paint.setTrigger(true); paint.update(.05); assert.equal(sounds.length, 0);
+  paint.setTrigger(false); assert.equal(paint.firing, false);
+  tick(paint, .12); assert.equal(sounds.length, 0, 'preserve the 200 ms trigger preparation');
+  tick(paint, .04); assert.deepEqual(sounds, ['revolver'], 'pointerup must not discard an accepted tap');
+  tick(paint, 1); assert.equal(sounds.length, 1, 'one tap schedules exactly one shot');
+  paint.dispose();
+});
+
+test('held R8 repeats at its primary cadence and release stops accepting further shots', () => {
+  const { scene, camera } = setup(), sounds = [];
+  const paint = createPaintball({ scene, camera, colliderRoots: [], onShot: id => sounds.push(id) });
+  paint.pickupWeapon('revolver'); paint.setTrigger(true); tick(paint, .22);
+  assert.equal(sounds.length, 1); tick(paint, .5); assert.equal(sounds.length, 2);
+  paint.setTrigger(false); tick(paint, 1.5); assert.equal(sounds.length, 2);
+  paint.dispose();
+});
+
+test('R8 windup is cancelled by reset, weapon switch, effects clear and player inactivity', () => {
+  const { scene, camera } = setup(), sounds = []; let active = true;
+  const paint = createPaintball({ scene, camera, colliderRoots: [], getActive: () => active, onShot: id => sounds.push(id) });
+  paint.pickupWeapon('revolver');
+  for (const cancel of [() => paint.resetInput(), () => paint.setWeapon('fists'), () => paint.clearEffects(), () => { active = false; }]) {
+    active = true; paint.clearEffects(); paint.setWeapon('revolver');
+    paint.setTrigger(true); paint.update(.05); cancel(); tick(paint, .4);
+    assert.equal(sounds.length, 0);
+  }
+  paint.dispose();
+});
+
+test('Nova sends a stronger, slower recoil envelope to the shared weapon pose and shot callback', () => {
+  const { scene, camera } = setup(), states = [], shots = [];
+  const paint = createPaintball({ scene, camera, colliderRoots: [], updateWeaponPose: (gun, state) => { states.push(state); return true; }, onShot: (id, info) => shots.push({ id, ...info }) });
+  paint.shoot(); paint.update(0); const pistolPeak = states.at(-1).recoil;
+  tick(paint, .1); const pistolTail = states.at(-1).recoil;
+  paint.clearEffects(); paint.pickupWeapon('shotgun'); paint.shoot(); paint.update(0);
+  const shotgunPeak = states.at(-1).recoil;
+  assert.ok(shotgunPeak >= pistolPeak * 2.4, 'Nova should visibly kick harder than the pistol');
+  tick(paint, .1);
+  assert.ok(states.at(-1).recoil / shotgunPeak > pistolTail / pistolPeak, 'Nova recovers more slowly');
+  assert.equal(shots.at(-1).recoilStrength, shotgunPeak);
+  assert.equal(shots.at(-1).recoilDecay, paint.weapon.recoilDecay);
+  assert.equal(shots.at(-1).id, 'shotgun');
   paint.dispose();
 });
 
@@ -112,7 +150,7 @@ test('AWP scope changes its field of view and reduces its unscoped dispersion', 
   const ball = paint.root.children.find(o => o.name === 'bolinha-tinta' && o.visible);
   const hipStart = ball.position.clone(); paint.update(.02);
   const hip = Math.abs(ball.position.x - hipStart.x);
-  paint.clearEffects(); paint.setAiming(true); tick(paint, .8); assert.ok(Math.abs(camera.fov - 40) < .01);
+  paint.clearEffects(); paint.setAiming(true); tick(paint, .8); assert.ok(camera.fov < 40 && camera.fov > 38);
   paint.shoot();
   const scopedBall = paint.root.children.find(o => o.name === 'bolinha-tinta' && o.visible), start = scopedBall.position.clone(); paint.update(.02);
   const scoped = Math.abs(scopedBall.position.x - start.x);

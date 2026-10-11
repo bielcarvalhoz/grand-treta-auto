@@ -96,7 +96,7 @@ function splatterGeometry() {
 }
 
 /** Inputs belong to the existing player/UI, so looking by dragging never fires. */
-export function createPaintball({ scene, camera, getActive = () => true, colliderRoots = () => [scene], onShot = () => {}, onAttack = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
+export function createPaintball({ scene, camera, getActive = () => true, getCameraMode = () => 'first', colliderRoots = () => [scene], onShot = () => {}, onAttack = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
   const root = new THREE.Group(); root.name = 'paintball-effects'; root.userData.paintballIgnore = true; scene.add(root);
   const gun = new THREE.Group(); gun.name = 'pistolinha-tinta'; gun.userData.paintballIgnore = true;
   const pistolModel = new THREE.Group(), autoModel = new THREE.Group();
@@ -163,9 +163,11 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     const mesh = new THREE.Mesh(markGeometry, colors[2].paint); mesh.name = 'marca-tinta'; mesh.visible = false; mesh.renderOrder = 3; root.add(mesh); return mesh;
   });
   const raycaster = new THREE.Raycaster(), forward = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3(), shotOrigin = new THREE.Vector3();
-  let colorIndex = 2, projectileIndex = 0, markIndex = 0, cooldown = 0, recoil = 0, shots = 0, disposed = false;
+  let colorIndex = 2, projectileIndex = 0, markIndex = 0, cooldown = 0, recoil = 0, recoilDecay = 16, shots = 0, disposed = false;
   let weaponIndex = 0, trigger = false, aiming = false, aimBlend = 0, attackSequence = 0, pendingAttack = null, pendingShot = null;
   let weaponModels = null;
+  let scopeZoom = 2;
+  const scoped = () => !disposed && !!getActive() && aiming && PAINTBALL_WEAPONS[weaponIndex].id === 'sniper' && getCameraMode() === 'first';
   const baseFov = camera.fov;
   const restoreView = () => {
     aiming = false; aimBlend = 0;
@@ -187,11 +189,16 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
 
   function poseWeapon() {
     const weapon = PAINTBALL_WEAPONS[weaponIndex];
-    if (updateWeaponPose?.(gun, { aimBlend, recoil, weapon: weapon.id, kind: weapon.kind, active: !!getActive() })) return;
-    gun.position.x = Math.min(.34, .32 * camera.aspect) * (1 - aimBlend);
-    gun.position.y = -.34 + aimBlend * .27;
-    gun.position.z = -.62 + recoil * .045 - aimBlend * .18;
-    gun.rotation.x = -recoil * .09 * (1 - aimBlend * .6);
+    const scopeActive = scoped();
+    if (!updateWeaponPose?.(gun, { aimBlend, recoil, weapon: weapon.id, kind: weapon.kind, active: !!getActive(), scoped: scopeActive })) {
+      gun.position.x = Math.min(.34, .32 * camera.aspect) * (1 - aimBlend);
+      gun.position.y = -.34 + aimBlend * .27;
+      gun.position.z = -.62 + recoil * .045 - aimBlend * .18;
+      gun.rotation.x = -recoil * .09 * (1 - aimBlend * .6);
+    }
+    // Keep updating the hidden socket: scoped shots still originate at the
+    // muzzle and use the same collision/aim path as every other firearm.
+    gun.visible = !!getActive() && !scopeActive;
   }
 
   function clearEffects() {
@@ -241,7 +248,8 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
       ball.weapon = weapon; ball.distance = 0;
       ball.mesh.material = colors[colorIndex].ball; ball.mesh.userData.paintColor = colorIndex; ball.mesh.visible = true; ball.age = 0;
     }
-    recoil = 1; shots++; onShot(weapon.id);
+    recoil = weapon.recoilStrength; recoilDecay = weapon.recoilDecay;
+    shots++; onShot(weapon.id, { recoilStrength: weapon.recoilStrength, recoilDecay: weapon.recoilDecay });
   }
 
   function meleeImpact(weapon) {
@@ -267,15 +275,18 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     if (disposed || !getActive() || cooldown > 0) return false;
     const weapon = PAINTBALL_WEAPONS[weaponIndex]; cooldown = weapon.interval;
     if (weapon.kind !== 'firearm') {
-      recoil = 1; pendingAttack = { weapon, remaining: weapon.interval * .28 };
+      recoil = 1; recoilDecay = 16; pendingAttack = { weapon, remaining: weapon.interval * .28 };
       onAttack(weapon, { sequence: attackSequence++ });
-    } else if (weapon.windup) pendingShot = { weapon, remaining: weapon.windup, needsTrigger: trigger };
+    } else if (weapon.windup) pendingShot = { weapon, remaining: weapon.windup };
     else emitShot(weapon);
     return true;
   }
 
   function setTrigger(pressed) {
-    if (!pressed || disposed || !getActive()) { trigger = false; if (pendingShot?.needsTrigger) pendingShot = null; return; }
+    if (disposed || !getActive()) { trigger = false; pendingShot = null; return; }
+    // A tap commits one shot, including its trigger preparation. Releasing
+    // stops repetition; explicit resets/switches still cancel pending shots.
+    if (!pressed) { trigger = false; return; }
     if (trigger) return;
     trigger = true; shoot();
   }
@@ -309,12 +320,13 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
 
   function update(dt) {
     if (disposed) return;
-    gun.visible = !!getActive();
+    const active = !!getActive();
+    gun.visible = active;
     // A narrow horizontal FOV must not put the entire first-person weapon offscreen.
     const elapsed = Math.min(.1, Math.max(0, dt));
     const cooldownOvershoot = Math.max(0, elapsed - cooldown);
-    cooldown = Math.max(0, cooldown - elapsed); recoil *= Math.exp(-elapsed * 16);
-    if (!gun.visible) { trigger = false; pendingAttack = pendingShot = null; restoreView(); poseWeapon(); return; }
+    cooldown = Math.max(0, cooldown - elapsed); recoil *= Math.exp(-elapsed * recoilDecay);
+    if (!active) { trigger = false; pendingAttack = pendingShot = null; restoreView(); poseWeapon(); return; }
     if (pendingAttack) {
       pendingAttack.remaining -= elapsed;
       if (pendingAttack.remaining <= 0) { meleeImpact(pendingAttack.weapon); pendingAttack = null; }
@@ -325,7 +337,10 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     }
     aimBlend += ((aiming ? 1 : 0) - aimBlend) * (1 - Math.exp(-elapsed * 18));
     if (Math.abs(aimBlend - (aiming ? 1 : 0)) < .001) aimBlend = aiming ? 1 : 0;
-    const fov = baseFov + ((PAINTBALL_WEAPONS[weaponIndex].aimFov || 45) - baseFov) * aimBlend;
+    const aimFov = scoped()
+      ? THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(baseFov) / 2) / scopeZoom))
+      : PAINTBALL_WEAPONS[weaponIndex].aimFov || 45;
+    const fov = baseFov + (aimFov - baseFov) * aimBlend;
     if (Math.abs(camera.fov - fov) > .001) { camera.fov = fov; camera.updateProjectionMatrix(); }
     poseWeapon();
     // At most one shot per rendered frame: a slow frame never releases a burst
@@ -397,6 +412,12 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     get weapon() { return PAINTBALL_WEAPONS[weaponIndex]; },
     get weaponIndex() { return weaponIndex; },
     get aiming() { return aiming; },
+    get scoped() { return scoped(); },
+    get scopeZoom() { return scopeZoom; },
+    adjustScopeZoom(delta) {
+      if (scoped() && Number.isFinite(delta)) scopeZoom = THREE.MathUtils.clamp(scopeZoom + delta, 2, 8);
+      return scopeZoom;
+    },
     get firing() { return trigger; },
     get stats() { return { projectiles: projectiles.filter(p => p.mesh.visible).length, marks: marks.filter(m => m.visible).length, shots }; },
   };

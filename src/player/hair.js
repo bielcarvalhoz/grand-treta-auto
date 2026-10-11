@@ -11,12 +11,15 @@ export function sweepHairTips(meshes) {
       // +X is Sato's LEFT (the original DEF-handL is on +X). Leave the
       // lower/back hair at the nape intact, and comb crown/front tips together.
       const front = MathUtils.smoothstep(z, .015, .095);
-      const top = MathUtils.smoothstep(y, .865, 1.005);
+      // The scalp reaches .936 and the covering shell is around .948. Bend
+      // protruding tips only; moving that shell would uncover the character's
+      // head, even if the new overall height looked correct.
+      const top = MathUtils.smoothstep(y, .948, .996);
       const fringe = front * MathUtils.smoothstep(y, .785, .86) * (1 - MathUtils.smoothstep(y, .89, .96));
-      const tip = top * (.30 + .70 * front);
-      const tousle = .80 + .20 * Math.sin(x * 93 + z * 47);
-      const sweep = (.050 * tip + .031 * fringe) * tousle;
-      positions.setXYZ(i, x + sweep, y - .020 * tip - .008 * fringe * tousle, z + .005 * fringe - .004 * tip);
+      // Every crown tip follows the fringe, while its shell/root stays put.
+      const tousle = .95 + .05 * Math.sin(x * 93 + z * 47);
+      const sweep = (.060 * top + .025 * fringe) * tousle;
+      positions.setXYZ(i, x + sweep, y - .028 * top - .005 * fringe * tousle, z + .004 * fringe - .003 * top);
     }
     positions.needsUpdate = true;
     mesh.geometry.computeVertexNormals(); mesh.geometry.computeBoundingBox(); mesh.geometry.computeBoundingSphere();

@@ -14,10 +14,11 @@ export function createPaintballModule(game) {
   const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen && !game.ui?.weaponWheelOpen;
   const paintball = createPaintball({
     scene, camera, getActive: paintEnabled,
+    getCameraMode: () => player.cameraMode,
     colliderRoots: () => game.training?.active ? [game.training.floor, game.dynamicProps?.root].filter(Boolean) : [scene],
     updateWeaponPose: (gun, state) => player.updateWeapon?.(gun, state),
     getShotOrigin: target => player.getShotOrigin ? player.getShotOrigin(target) : camera.getWorldPosition(target),
-    onShot: weapon => { game.audio?.shot(weapon); player.avatar?.playShot(); },
+    onShot: (weapon, recoil) => { game.audio?.shot(weapon); player.avatar?.playShot(recoil?.recoilStrength); },
     onAttack: (weapon, state) => { game.audio?.melee?.(weapon); player.avatar?.playAttack?.(weapon, state); },
     onImpact: (hit, info) => game.dynamicProps?.impact(hit, info),
   });
