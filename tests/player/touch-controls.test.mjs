@@ -38,6 +38,16 @@ test('movement and look pointers retain independent roles; cancel, resize and pa
     assert.equal(firing.at(-1),true);
     send('pointercancel', 9, 310, 610, fireButton); assert.equal(firing.at(-1),false); assert.equal(fireCaptured.size,0);
     send('pointercancel', 1, 200, 548); assert.equal(sticks.at(-1).active, false); assert.equal(sticks.at(-1).x, 0);
+    send('pointerdown', 11, 60, 600); send('pointermove', 11, 60, 548);
+    send('pointerup', 11, 60, 548, window);
+    assert.equal(sticks.at(-1).active, false, 'release outside the canvas must free the joystick');
+    send('pointerdown', 12, 60, 600); send('pointermove', 12, 60, 548);
+    const fresh = new Event('pointerdown'); Object.assign(fresh, { pointerType: 'touch', pointerId: 13, isPrimary: true });
+    window.dispatchEvent(fresh); send('pointerdown', 13, 60, 600); send('pointermove', 13, 112, 600);
+    assert.equal(sticks.at(-1).x, 1, 'a fresh primary touch replaces a gesture whose release was lost');
+    send('pointercancel', 13, 112, 600, window);
+    send('pointerdown', 14, 330, 600, fireButton); send('pointerup', 14, 330, 600, window);
+    assert.equal(firing.at(-1), false, 'fire also stops when released outside its button');
     send('pointerdown', 3, 60, 600); send('pointermove', 3, 60, 548);
     send('pointerdown', 10, 330, 600, fireButton);
     window.dispatchEvent(new Event('resize')); assert.equal(sticks.at(-1).active, false); assert.equal(sticks.at(-1).y, 0); assert.equal(captured.size, 0);

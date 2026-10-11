@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 
 // Estilo visual: "cartoon" (sombreamento em faixas, MeshToonMaterial) alternável com o
-// realista (MeshStandardMaterial), e modo pixelado (renderiza em baixa resolução e
-// amplia sem suavizar).
+// realista (MeshStandardMaterial).
 
 function toonGradient() {
   const data = new Uint8Array([70, 140, 205, 255]);
@@ -20,8 +19,6 @@ export function createStyler(scene, renderer, hemi) {
   const toonOf = new Map(); // material padrão -> toon
   const meshes = []; // [mesh, standard, toon]
   let cartoon = false;
-  let pixel = false;
-  const standardPixelRatio = renderer.getPixelRatio();
 
   function toToon(std) {
     if (toonOf.has(std)) return toonOf.get(std);
@@ -51,18 +48,9 @@ export function createStyler(scene, renderer, hemi) {
     hemi.intensity = on ? 1.15 : 0.25;
   }
 
-  function setPixel(on) {
-    pixel = on;
-    renderer.setPixelRatio(on ? 0.3 : standardPixelRatio);
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.domElement.style.imageRendering = on ? 'pixelated' : '';
-  }
-
   return {
     collect,
     setCartoon,
-    setPixel,
     get cartoon() { return cartoon; },
-    get pixel() { return pixel; },
   };
 }

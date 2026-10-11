@@ -91,6 +91,24 @@ test('weapon wheel keeps joystick selection alive while suppressing movement and
   } finally { restore(); }
 });
 
+test('Tab and focused HUD buttons cannot strand walking controls; menus and text fields keep keyboard input', () => {
+  const { player, restore } = controllerFixture();
+  try {
+    const button = { closest: selector => selector.includes('button') ? button : null };
+    const key = (code, target = button, type = 'keydown') => {
+      const event = new Event(type, { cancelable: true }); Object.assign(event, { code });
+      Object.defineProperty(event, 'target', { value: target }); window.dispatchEvent(event); return event;
+    };
+    assert.equal(key('Tab').defaultPrevented, true);
+    key('KeyW'); player.update(.05); assert.ok(player.feet.z < 0, 'W works after a HUD button takes focus');
+    key('KeyW', button, 'keyup'); player.placeAt(0, 0);
+    const input = { closest: selector => selector.includes('input') ? input : null };
+    assert.equal(key('Tab', input).defaultPrevented, false);
+    key('KeyW', input); player.update(.05); assert.equal(player.feet.z, 0);
+    player.stop(); assert.equal(key('Tab').defaultPrevented, false);
+  } finally { restore(); }
+});
+
 test('crouch lowers the eyes without moving the feet and caps analog or Shift movement at a crouch walk', () => {
   const { player, camera, send, restore } = controllerFixture();
   try {

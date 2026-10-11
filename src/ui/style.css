@@ -285,6 +285,8 @@ body.touch #toast { width: max-content; max-width: 85vw; white-space: normal; te
 
 /* Native page gestures never compete with movement/aim or our map's pinch. */
 html, body, button, canvas { touch-action: none; }
+html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+@media (pointer: coarse) { input, select, textarea { font-size: 16px !important; } }
 body * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 #settings-panel, #map-places, #tour-places { touch-action: pan-y; }
 #tour-places { touch-action: pan-x; }
@@ -421,7 +423,7 @@ body.training-active #training-status { display: none; }
 .combat-health-track { height: 5px; margin: 6px 0 8px; border-radius: 3px; background: #071119; overflow: hidden; }
 #combat-health-fill { display: block; height: 100%; background: #8dd99b; transition: width .15s; }
 .combat-status p { font-size: 10px; margin: 5px 0; color: #bacbd3; }
-#combat-hud button { pointer-events: auto; font: inherit; color: #edf4f4; border: 1px solid #586e7b; border-radius: 5px; background: #273d4a; padding: 9px 12px; min-height: 40px; cursor: pointer; touch-action: manipulation; }
+#combat-hud button { pointer-events: auto; font: inherit; color: #edf4f4; border: 1px solid #586e7b; border-radius: 5px; background: #273d4a; padding: 9px 12px; min-height: 40px; cursor: pointer; touch-action: none; }
 #combat-lab-toggle { margin-top: 5px; width: 100%; font-size: 11px !important; }
 #combat-lab-toggle kbd { margin-left: 8px; color: #a0bdc8; }
 #combat-hit { position: absolute; top: calc(50% + 32px); left: 50%; transform: translateX(-50%); color: #fff1c9; font-size: 12px; text-shadow: 0 1px 4px #000; white-space: nowrap; }

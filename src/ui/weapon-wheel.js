@@ -143,11 +143,21 @@ export function createWeaponWheel(game) {
     if (owner?.type !== 'pointer' || owner.id !== e.pointerId) return;
     e.preventDefault(); lastGesture = performance.now(); close(true);
   });
+  window.addEventListener('pointerup', e => {
+    if (owner?.type === 'pointer' && owner.id === e.pointerId) { e.preventDefault(); close(true); }
+  }, true);
+  window.addEventListener('pointercancel', e => {
+    if (owner?.type === 'pointer' && owner.id === e.pointerId) close();
+  }, true);
+  window.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch' && e.isPrimary && owner?.type === 'pointer') close();
+  }, true);
   for (const type of ['pointercancel', 'lostpointercapture']) button.addEventListener(type, e => {
     if (owner?.type === 'pointer' && owner.id === e.pointerId) close();
   });
   button.addEventListener('click', e => {
     e.preventDefault();
+    if (e.pointerType === 'touch' || e.sourceCapabilities?.firesTouchEvents) return;
     // Screen readers can open the wheel, then use arrows and Enter.
     if (e.detail === 0 && !owner && pointerId === null && performance.now() - lastGesture > 500) open({ type: 'access' });
   });
