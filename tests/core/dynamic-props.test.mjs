@@ -42,3 +42,36 @@ test('Rapier crate settles, receives off-centre shot/melee impulses, and switche
     assert.ok(props.surfaceHeightAt(0, 0, 14) > 13, 'crate top can be stood on after a jump');
   } finally { props.dispose(); }
 });
+
+test('crate ray misses never create a second floor anywhere around the football field', async () => {
+  const game = fixture(); game.training.active = false; game.mode = 'campaign';
+  const props = await createDynamicProps(game);
+  try {
+    for (let i = 0; i < 100; i++) props.update(1 / 60);
+    for (const x of [-50, -3, 3, 20, 50]) for (const z of [-50, -3, 3, 20, 50]) {
+      for (const maxY of [12, 14, 17, Infinity]) {
+        assert.equal(props.surfaceHeightAt(x, z, maxY), -Infinity, `${x}/${z}: phantom surface after jump`);
+        assert.equal(props.roofAt(x, z, maxY), -Infinity, `${x}/${z}: phantom roof after jump`);
+      }
+    }
+    const wood = props.crates.find(c => c.mode === 'campaign' && c.type === 'wood');
+    wood.body.setRotation({ x: 0, y: Math.sin(Math.PI / 8), z: 0, w: Math.cos(Math.PI / 8) }, true); props.update(0);
+    assert.equal(props.surfaceHeightAt(.8, .8, Infinity), -Infinity, 'misses within a rotated box AABB must also be rejected');
+    assert.ok(props.surfaceHeightAt(0, 0, Infinity) > 13, 'real box tops remain walkable');
+  } finally { props.dispose(); }
+});
+
+test('larger metal crate is outside the weapon ring and resists the same shots/punches', async () => {
+  const game = fixture(), props = await createDynamicProps(game);
+  try {
+    const wood = props.crates.find(c => c.mode === 'training' && c.type === 'wood');
+    const metal = props.crates.find(c => c.mode === 'training' && c.type === 'metal');
+    assert.ok(metal.bounds.getSize(new THREE.Vector3()).x > wood.bounds.getSize(new THREE.Vector3()).x);
+    assert.ok(metal.mesh.position.distanceTo(wood.mesh.position) > 5);
+    for (const kind of ['firearm', 'melee', 'unarmed']) {
+      for (const crate of [wood, metal]) { crate.body.setLinvel({ x: 0, y: 0, z: 0 }, true); props.impact({ object: crate.mesh, point: crate.mesh.position }, { direction: { x: 1, y: 0, z: 0 }, impulse: 3, kind }); }
+      assert.ok(wood.body.linvel().x > 1.9, `${kind}: wood should react strongly`);
+      assert.ok(metal.body.linvel().x < wood.body.linvel().x / 10, `${kind}: metal must feel heavier`);
+    }
+  } finally { props.dispose(); }
+});

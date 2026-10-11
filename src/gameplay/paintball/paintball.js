@@ -1,6 +1,7 @@
 import { preparePaintColliders, intersectsPaintBounds } from './collision.js';
 import * as THREE from 'three';
 import { WEAPONS, createWeaponInventory } from './weapons.js';
+import { createSurfacePaintGeometry, projectSurfacePaint, surfacePaintMaterial } from './surface-paint.js';
 
 export const PAINTBALL_PALETTE = Object.freeze([
   { id: 'cinza', label: 'Cinza', color: '#88939b' },
@@ -79,22 +80,6 @@ function tracePaintMeshes(raycaster, from, to, meshes, ignored) {
   return null;
 }
 
-function splatterGeometry() {
-  const positions = [];
-  const disk = (x, y, radius, count, irregular = false) => {
-    for (let i = 0; i < count; i++) {
-      const angleA = i * Math.PI * 2 / count, angleB = (i + 1) * Math.PI * 2 / count;
-      const r = angle => radius * (irregular ? 1 + .16 * Math.sin(angle * 5) + .09 * Math.cos(angle * 9) : 1);
-      positions.push(x, y, 0, x + Math.cos(angleA) * r(angleA), y + Math.sin(angleA) * r(angleA), 0, x + Math.cos(angleB) * r(angleB), y + Math.sin(angleB) * r(angleB), 0);
-    }
-  };
-  disk(0, 0, .19, 28, true);
-  for (const [x, y, r] of [[.26, .10, .040], [-.24, .04, .033], [.07, -.26, .035], [-.12, .23, .026], [.25, -.14, .023]]) disk(x, y, r, 7);
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geometry.computeVertexNormals();
-  return geometry;
-}
-
 /** Inputs belong to the existing player/UI, so looking by dragging never fires. */
 export function createPaintball({ scene, camera, getActive = () => true, getCameraMode = () => 'first', colliderRoots = () => [scene], onShot = () => {}, onAttack = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
   const root = new THREE.Group(); root.name = 'paintball-effects'; root.userData.paintballIgnore = true; scene.add(root);
@@ -119,7 +104,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
   const colors = PAINTBALL_PALETTE.map(p => ({
     ball: keepMaterial(new THREE.MeshBasicMaterial({ color: p.color, toneMapped: false })),
     gun: gunMaterial(p.color),
-    paint: keepMaterial(new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: .93, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, toneMapped: false })),
+    paint: keepMaterial(surfacePaintMaterial(p.color)),
   }));
   const addGun = (geometry, material, position, parent = pistolModel) => {
     const mesh = new THREE.Mesh(keepGeometry(geometry), material); mesh.position.set(...position); mesh.renderOrder = 1000; parent.add(mesh); return mesh;
@@ -154,13 +139,13 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
     addGun(new THREE.BoxGeometry(.065, .06, .07), colors[2].gun, [0, 0, -.16], parent);
   }
 
-  const ballGeometry = keepGeometry(new THREE.SphereGeometry(.075, 8, 6)), markGeometry = keepGeometry(splatterGeometry());
+  const ballGeometry = keepGeometry(new THREE.SphereGeometry(.075, 8, 6));
   const projectiles = Array.from({ length: PAINTBALL_LIMITS.projectiles }, () => {
     const mesh = new THREE.Mesh(ballGeometry, colors[2].ball); mesh.name = 'bolinha-tinta'; mesh.visible = false; root.add(mesh);
     return { mesh, velocity: new THREE.Vector3(), age: 0 };
   });
   const marks = Array.from({ length: PAINTBALL_LIMITS.marks }, () => {
-    const mesh = new THREE.Mesh(markGeometry, colors[2].paint); mesh.name = 'marca-tinta'; mesh.visible = false; mesh.renderOrder = 3; root.add(mesh); return mesh;
+    const mesh = new THREE.Mesh(keepGeometry(createSurfacePaintGeometry()), colors[2].paint); mesh.name = 'marca-tinta'; mesh.visible = false; mesh.renderOrder = 3; root.add(mesh); return mesh;
   });
   const raycaster = new THREE.Raycaster(), forward = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3(), shotOrigin = new THREE.Vector3();
   let colorIndex = 2, projectileIndex = 0, markIndex = 0, cooldown = 0, recoil = 0, recoilDecay = 16, shots = 0, disposed = false;
@@ -358,9 +343,12 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
       ball.distance += ball.mesh.position.distanceTo(step.position);
       if (hit) {
         const mark = marks[markIndex++ % marks.length]; mark.material = colors[ball.mesh.userData.paintColor].paint;
-        mark.position.copy(hit.point).addScaledVector(hit.normal, .014);
-        mark.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
-        mark.rotateZ(markIndex * 2.39996); mark.scale.setScalar(.90 + (markIndex % 5) * .06); mark.visible = true;
+        const projection = projectSurfacePaint(hit, refreshColliders(), mark.geometry, markIndex);
+        mark.position.copy(projection.origin); mark.quaternion.identity(); mark.scale.setScalar(1);
+        mark.visible = projection.vertices > 0;
+        // Depth test keeps paint behind scenery; no depth writes and explicit
+        // chronology make each new colour cover the previous one, even on reuse.
+        mark.renderOrder = 3 + markIndex;
         mark.userData.followObject = null;
         for (let object = hit.object; object; object = object.parent) {
           if (!object.userData.dynamicPaint && !object.userData.rigidBody && !object.userData.physicsBody) continue;

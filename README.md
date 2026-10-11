@@ -25,7 +25,9 @@ npm run dev
 
 Abra http://localhost:5173 e escolha **Campanha**, **Modo treino** ou **Modo tour**. A capa **Grand Treta Auto: City of God** monta um mosaico cartoon com recortes diagonais e revela o logo letra por letra enquanto os dados da cidade são baixados. A montagem 3D começa depois da abertura (ou ao pulá-la), para não travar as imagens nem a escrita do título.
 
-O **Modo treino** abre um espaço quadriculado com uma caixa física Rapier perto do spawn e uma cópia de cada arma no chão. Cada quadrado mede 2 metros. Use-o para andar, correr, pular e testar tiros, golpes e câmeras. Na campanha há outra caixa no centro do campo de futebol e armas extras ao redor. Ao sair do treino, a posição anterior na cidade é restaurada.
+O **Modo treino** abre um espaço quadriculado com caixas físicas Rapier de madeira (1,20 m / 6 kg) e metal (1,60 m / 72 kg), além de uma cópia de cada arma no chão. A caixa de metal fica à direita, fora da faixa das armas. Cada quadrado mede 2 metros. Use-o para andar, correr, pular e testar tiros, golpes e câmeras. Na campanha há as mesmas caixas no campo de futebol e armas extras ao redor. Ao sair do treino, a posição anterior na cidade é restaurada.
+
+No treino, toque **Ajustar mãos / armas** ou aperte `B`. Escolha a arma, a câmera e o alvo do ajuste: **Arma nas mãos** edita posição XYZ em metros, rotação XYZ em graus e escala XYZ, separadas por arma e perspectiva; **Braços na câmera** ajusta o conjunto dos braços na primeira pessoa, inclusive o soco. Toque num valor e use `− / +` para ajustes pequenos no celular, ou digite o valor. As alterações são salvas neste navegador. **Preparar print** compacta o painel num cartão com nome/ID da arma, perspectiva, alvo e todos os valores; **Copiar config** copia os mesmos dados em JSON. **Restaurar** limpa só o ajuste selecionado. Veja [diagnóstico e validação](docs/TRAINING-PHYSICS.md).
 
 O personagem **Sato**, carregado de `public/models/sato.glb`, começa com Glock-18, M4A4 e faca. São **2 slots de fogo + 1 melee**, com socos sempre disponíveis. O catálogo inclui revólver R8, Nova, AWP, MP5-SD, três facas, machado e bastão com arame. As referências de dano, cadência e funcionamento estão em [docs/weapons.md](docs/weapons.md). Todas as armas mantêm detalhes na cor escolhida; melee e socos não pintam o chão. `X`, o ícone discreto à esquerda ou o scroll alternam primeira/terceira pessoa. As vistas compartilham o mesmo Sato e suas animações de tiro, espada e sequência de socos.
 
@@ -43,6 +45,7 @@ A música original dos menus e os efeitos de navegação/paintball usam Web Audi
 | Segurar `Q` | abrir roda; apontar e soltar para equipar |
 | `E` | pegar arma próxima e soltar a anterior do slot |
 | `X` | alternar primeira/terceira pessoa |
+| `B` | abrir/fechar ajustes de armas e braços (treino) |
 | Scroll ↑ / ↓ | aumentar / reduzir zoom no escopo da AWP; fora dele, primeira / terceira pessoa |
 | Botão direito | segurar mira focada |
 | `M` | mapa — clique para se teletransportar |

@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 
-const HALF = .6, FIXED_STEP = 1 / 60;
+const FIXED_STEP = 1 / 60;
+export const CRATE_TYPES = Object.freeze({
+  wood: { half: .6, mass: 6, friction: .45 },
+  metal: { half: .8, mass: 72, friction: .8 },
+});
 let rapierReady;
 
 /** A small deterministic plank texture, including battens and nail heads. */
@@ -38,21 +42,27 @@ export async function createDynamicProps(game) {
   const root = new THREE.Group(); root.name = 'rapier-test-crates';
   game.engine.scene.add(root);
   const texture = woodenCrateTexture();
-  const geometry = new THREE.BoxGeometry(HALF * 2, HALF * 2, HALF * 2);
-  const material = new THREE.MeshStandardMaterial({ map: texture, roughness: .91 });
+  const resources = Object.fromEntries(Object.entries(CRATE_TYPES).map(([type, { half }]) => [type, {
+    geometry: new THREE.BoxGeometry(half * 2, half * 2, half * 2),
+    material: new THREE.MeshStandardMaterial(type === 'wood' ? { map: texture, roughness: .91 }
+      : { color: 0x657580, metalness: .82, roughness: .35 }),
+  }]));
   const campaign = footballFieldCenter(game), training = { x: game.training.spawn.x, z: game.training.spawn.z - 4 };
   const crates = [];
-  for (const [mode, at] of [['campaign', campaign], ['training', training]]) {
+  for (const [mode, center] of [['campaign', campaign], ['training', training]]) for (const [type, spec] of Object.entries(CRATE_TYPES)) {
+    // The metal box sits beyond the pickup lane/ring, with a clear firing lane.
+    const at = type === 'metal' ? { x: center.x + 5.6, z: center.z - 1 } : center;
+    const { half, mass, friction } = spec;
     const y = mode === 'training' ? 0 : game.map.terrain.heightAt(at.x, at.z);
-    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(at.x, y + HALF + .03, at.z)
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(at.x, y + half + .03, at.z)
       .setLinearDamping(.18).setAngularDamping(.35).setCcdEnabled(true));
-    world.createCollider(RAPIER.ColliderDesc.cuboid(HALF, HALF, HALF).setMass(8).setFriction(.65).setRestitution(.12), body);
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = `wooden-crate-${mode}`;
+    world.createCollider(RAPIER.ColliderDesc.cuboid(half, half, half).setMass(mass).setFriction(friction).setRestitution(.12), body);
+    const mesh = new THREE.Mesh(resources[type].geometry, resources[type].material);
+    mesh.name = `${type === 'wood' ? 'wooden' : 'metal'}-crate-${mode}`;
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.userData.dynamicBody = true;
     mesh.userData.dynamicPaint = true;
-    const crate = { mode, mesh, body, bounds: new THREE.Box3(), damage: 0, hits: 0, spawn: new THREE.Vector3(at.x, y + HALF + .03, at.z) };
+    const crate = { mode, type, mass, mesh, body, bounds: new THREE.Box3(), damage: 0, hits: 0, spawn: new THREE.Vector3(at.x, y + half + .03, at.z) };
     mesh.userData.crate = crate;
     root.add(mesh); crates.push(crate);
   }
@@ -105,12 +115,12 @@ export async function createDynamicProps(game) {
     const crate = hit.object?.userData.crate;
     if (!crate || !crate.mesh.visible || disposed) return false;
     const direction = new THREE.Vector3().copy(info.direction || { x: 0, y: 0, z: -1 }).normalize();
-    const impulse = Math.max(0, info.impulse || 6);
+    const impulse = Math.max(0, info.impulse ?? 6) * (info.kind === 'firearm' ? 4 : 4.5);
     direction.multiplyScalar(impulse);
     if (info.kind !== 'firearm') direction.y += impulse * .13;
     crate.body.applyImpulseAtPoint(direction, hit.point, true);
     crate.damage += Math.max(0, info.damage || 0); crate.hits++;
-    game.audio?.impact?.('wood', impulse);
+    game.audio?.impact?.(crate.type, impulse);
     return true;
   }
   function collide(x, z, radius = .35, feetY = 0, { push = true } = {}) {
@@ -137,9 +147,12 @@ export async function createDynamicProps(game) {
     let top = -Infinity;
     for (const crate of crates) {
       if (!crate.mesh.visible) continue;
+      // Rapier 0.21 returns -1 on a miss. Reject misses before converting the
+      // time-of-impact into height, otherwise a phantom floor covers the map.
+      if (x < crate.bounds.min.x || x > crate.bounds.max.x || z < crate.bounds.min.z || z > crate.bounds.max.z) continue;
       const ray = new RAPIER.Ray({ x, y: crate.bounds.max.y + 1, z }, { x: 0, y: -1, z: 0 });
       const hit = crate.body.collider(0).castRay(ray, 3, true);
-      if (hit !== null && ray.origin.y - hit <= maxY + .001) top = Math.max(top, ray.origin.y - hit);
+      if (Number.isFinite(hit) && hit >= 0 && ray.origin.y - hit <= maxY + .001) top = Math.max(top, ray.origin.y - hit);
     }
     return top;
   }
@@ -147,6 +160,6 @@ export async function createDynamicProps(game) {
   game.engine.addSystem(update, 'early');
   return { root, crates, world, campaign, training, update, impact, collide, surfaceHeightAt,
     roofAt: (x, z, y) => surfaceHeightAt(x, z, y + .05),
-    dispose() { if (disposed) return; disposed = true; root.removeFromParent(); geometry.dispose(); material.dispose(); texture.dispose(); world.free(); },
+    dispose() { if (disposed) return; disposed = true; root.removeFromParent(); for (const { geometry, material } of Object.values(resources)) { geometry.dispose(); material.dispose(); } texture.dispose(); world.free(); },
   };
 }
