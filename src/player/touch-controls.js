@@ -59,9 +59,16 @@ export function createTouchControls(dom, { isActive, onLook, onStick, onDoubleTa
         lastTap = null; onDoubleTap();
       } else lastTap = tap ? { time: now, x: e.clientX, y: e.clientY } : null;
     }
+    if (e.pointerId === fire?.id) releaseFire();
     release(e.pointerId);
   };
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) dom.addEventListener(type, end);
+  // Capture releases before HUD handlers stop propagation, even if the browser
+  // lost pointer capture. A new primary touch means no previous touch is alive.
+  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, end, true);
+  window.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch' && e.isPrimary && (stick || look || fire)) reset();
+  }, true);
   window.addEventListener('blur', reset);
   window.addEventListener('resize', reset);
   document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });

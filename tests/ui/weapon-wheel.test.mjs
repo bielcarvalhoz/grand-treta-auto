@@ -88,6 +88,19 @@ test('touch hold captures the owning finger, drag selects melee and compatibilit
   s.send(button, 'click', { detail: 0 }); s.send(button, 'click', { detail: 1 }); assert.equal(s.wheel.open, false);
 }));
 
+test('outside releases and fresh primary touches recover a stranded mobile weapon wheel', () => setup(s => {
+  const button = s.element('btn-weapon');
+  s.send(button, 'pointerdown', { pointerId: 7, pointerType: 'touch', clientX: 500, clientY: 250 });
+  s.send(button, 'pointermove', { pointerId: 7, clientX: 580, clientY: 250 });
+  s.send(window, 'pointerup', { pointerId: 7 });
+  assert.equal(s.wheel.open, false); assert.equal(s.playerOpen, false); assert.equal(s.paintball.weapon.id, 'automatic');
+  s.send(button, 'pointerdown', { pointerId: 8, pointerType: 'touch', clientX: 500, clientY: 250 });
+  s.send(window, 'pointercancel', { pointerId: 8 }); assert.equal(s.playerOpen, false);
+  s.send(button, 'pointerdown', { pointerId: 9, pointerType: 'touch', clientX: 500, clientY: 250 });
+  s.send(window, 'pointerdown', { pointerId: 10, pointerType: 'touch', isPrimary: true });
+  assert.equal(s.wheel.open, false); assert.equal(s.playerOpen, false);
+}));
+
 test('analog selection includes fists; cancellation and mode or map loss never commit', () => setup(s => {
   s.key('KeyQ'); s.send(s.player.events, 'joystick', { detail: { active: true, x: -1, y: 0 } });
   s.send(window, 'keyup', { code: 'KeyQ' }); assert.equal(s.paintball.weapon.id, 'fists');

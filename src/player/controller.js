@@ -17,6 +17,7 @@ const STEP_UP = 0.7;
 const TOUCH_FLY_SPEED = 16; // m/s
 
 export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, roofAt, bounds, allowFlight = () => true, canAct = () => true }) {
+  dom.tabIndex = -1;
   const controls = new PointerLockControls(camera, dom);
   const keys = new Set();
   const feet = new THREE.Vector3();
@@ -50,6 +51,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
 
   /** touch = true quando o jogo foi iniciado por toque (celular/tablet) */
   function start(touch = false) {
+    dom.focus?.({ preventScroll: true });
     if (touch) {
       mode = 'touch';
       setActive(true);
@@ -90,6 +92,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   });
   dom.addEventListener('pointerdown', (e) => {
     if (!active) return;
+    dom.focus?.({ preventScroll: true });
     if (e.pointerType !== 'touch' && mode === 'drag') dragging = true;
   });
   window.addEventListener('pointerup', (e) => { if (e.pointerType !== 'touch') dragging = false; });
@@ -135,12 +138,18 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     }
   };
   window.addEventListener('keydown', (e) => {
-    if (e.target?.closest?.('button, input, select, textarea, [contenteditable=true]')) return;
+    if (e.target?.closest?.('input, select, textarea, [contenteditable=true]')) return;
+    // Tab must not move gameplay focus to a HUD button and swallow WASD.
+    // Menus, editable fields and the weapon wheel keep their normal navigation.
+    if (active && canAct() && !weaponWheelOpen && e.code === 'Tab') {
+      e.preventDefault(); dom.focus?.({ preventScroll: true }); return;
+    }
+    if (e.target?.closest?.('button') && ['Space', 'Enter'].includes(e.code)) return;
     if (mode === 'drag' && active && e.code === 'Escape') { setActive(false); return; }
-    if (active) { onKey(e, true); if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault(); }
+    if (active && canAct()) { onKey(e, true); if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => onKey(e, false));
-  window.addEventListener('blur', () => keys.clear());
+  window.addEventListener('blur', () => { keys.clear(); dragging = false; });
   document.addEventListener('visibilitychange', () => { if (document.hidden) keys.clear(); });
 
   function groundAt(x, z, fromY) {
