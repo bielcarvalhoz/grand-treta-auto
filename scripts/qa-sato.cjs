@@ -25,6 +25,7 @@ async function run() {
       await activate('#training');
       await page.waitForFunction(() => __cdd.player.active && __cdd.game.training.active);
       await page.waitForTimeout(350);
+      assert.equal(await page.evaluate(() => getComputedStyle(__cdd.renderer.domElement).cursor), 'none');
       let data = await page.evaluate(() => ({ mode: __cdd.game.mode, cameraMode: __cdd.player.cameraMode,
         feet: __cdd.player.feet.toArray(), floor: __cdd.game.training.floor.visible,
         visibleMeshes: __cdd.player.avatar.meshes.filter(mesh => mesh.visible).map(mesh => mesh.name),
@@ -58,10 +59,15 @@ async function run() {
       await page.screenshot({ path: path.join(directory, `${label}-automatic-blue.png`) });
       // Keyboard activation exercises the accessible fire action on all layouts.
       if (touch) await page.locator('#btn-fire').press('Enter');
-      else { await page.mouse.down(); await page.waitForTimeout(350); await page.mouse.up(); await page.mouse.up({ button: 'right' }); }
+      else {
+        await page.keyboard.down('KeyD'); await page.mouse.down(); await page.waitForTimeout(80);
+        await page.screenshot({ path: path.join(directory, `${label}-recoil-strafe.png`) });
+        await page.waitForTimeout(270); await page.mouse.up(); await page.keyboard.up('KeyD'); await page.mouse.up({ button: 'right' });
+      }
       assert.ok(await page.evaluate(() => __cdd.paintball.stats.shots > 0));
       if (touch) await activate('#btn-menu'); else await page.keyboard.press('Escape');
       await page.waitForFunction(() => __cdd.game.mode === null && !__cdd.game.training.active);
+      assert.equal(await page.locator('#play').evaluate(button => getComputedStyle(button).cursor), 'pointer');
       assert.deepEqual(await page.evaluate(() => __cdd.player.feet.toArray()), checkpoint);
       assert.equal(await page.evaluate(() => __cdd.paintball.stats.projectiles + __cdd.paintball.stats.marks), 0);
       await activate('#play'); await page.waitForFunction(() => __cdd.game.mode === 'campaign' && __cdd.player.active);

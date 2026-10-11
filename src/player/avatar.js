@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { sweepHairTips } from './hair.js';
 
 const upperTrack = /spine|neck|head|shoulder|upper_arm|forearm|hand|f_index|f_middle|f_ring|f_pinky|thumb|support_elbow/;
 const namedClip = (clips, name) => clips.find(clip => clip.name.split('|').at(-1) === name);
@@ -24,6 +25,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
       object.receiveShadow = object.castShadow = true; object.userData.paintballIgnore = true;
     }
   });
+  sweepHairTips(meshes);
   const clips = gltf.animations, mixer = new THREE.AnimationMixer(model);
   const rightHand = bones['DEF-handR'], leftHand = bones['DEF-handL'];
   const neutral = namedClip(clips, 'Pistol_Aim_Neutral');
@@ -34,6 +36,8 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   const sampler = new THREE.AnimationMixer(model);
   sampler.clipAction(neutral).play(); sampler.setTime(0); root.updateMatrixWorld(true);
   const socketRotation = rightHand.getWorldQuaternion(quaternion()).invert();
+  const spine = bones['DEF-spine001'], hips = spine.parent;
+  const hipsReference = model.getWorldQuaternion(quaternion()).invert().multiply(hips.getWorldQuaternion(quaternion()));
   sampler.stopAllAction(); sampler.uncacheRoot(model);
   const aimLimits = ['Pistol_Aim_Up', 'Pistol_Aim_Down'].map(name => {
     sampler.clipAction(namedClip(clips, name) || neutral).play(); sampler.setTime(0); root.updateMatrixWorld(true);
@@ -56,6 +60,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   const shootAction = shootClip ? layer(THREE.AnimationUtils.makeClipAdditive(shootClip.clone(), 0, neutral), true)
     .setLoop(THREE.LoopOnce, 1) : null;
   const poseAnchor = vector();
+  const authoredSpine = spine.quaternion.clone();
   function setMotion(name, speed) {
     if (!lowerActions.has(name)) {
       const clip = namedClip(clips, name) || namedClip(clips, 'Idle_Loop');
@@ -88,24 +93,41 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     if (preview) mixer.setTime(preview.time);
     else {
       const speed = Math.hypot(player.velocity.x, player.velocity.z);
-      setMotion(!player.grounded && player.active ? 'Jump_Loop' : speed > 7 ? 'Sprint_Loop' : speed > .15 ? 'Walk_Loop' : 'Idle_Loop',
-        speed > .15 && speed <= 7 ? THREE.MathUtils.clamp(speed / 2.7, .65, 1.8) : 1);
+      const airborne = !player.grounded && player.active;
+      // Median planted-toe speeds measured on the source clips at 1.8 m height.
+      setMotion(airborne ? 'Jump_Loop' : speed > 7 ? 'Sprint_Loop' : speed > .15 ? 'Jog_Fwd_Loop' : 'Idle_Loop',
+        airborne ? 1 : speed > 7 ? speed / 7.015 : speed > .15 ? speed / 4.588 : 1);
       // First-person shoulders already rotate with the eyes. Third person uses
       // the supplied up/down aim poses without twisting the bones by hand.
       const pitch = player.cameraMode === 'third' ? new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ').x : 0;
       const amount = THREE.MathUtils.clamp(Math.abs(pitch) / aimLimits[pitch > 0 ? 0 : 1], 0, 1);
       const weights = [1 - amount, pitch > 0 ? amount : 0, pitch < 0 ? amount : 0];
       aimActions.forEach((action, i) => { action.play(); action.setEffectiveWeight(weights[i]); });
+      spine.quaternion.copy(authoredSpine);
       mixer.update(Math.min(.05, Math.max(0, dt)));
+      authoredSpine.copy(spine.quaternion);
+      // Legs retain their gait, while the aiming torso cancels inherited hip
+      // rotation. Stabilize the whole arm chain, never the wrists/fingers alone.
+      root.updateMatrixWorld(true);
+      const hipsWorld = hips.getWorldQuaternion(quaternion());
+      spine.quaternion.premultiply(hipsWorld.clone().invert().multiply(model.getWorldQuaternion(quaternion())).multiply(hipsReference));
+      root.updateMatrixWorld(true);
+      const gunRotation = rightHand.getWorldQuaternion(quaternion()).multiply(socketRotation);
+      const aimFrame = player.cameraMode === 'first' ? camera.quaternion.clone() : quaternion().setFromAxisAngle(vector().set(0, 1, 0), player.yaw);
+      const relative = aimFrame.clone().invert().multiply(gunRotation);
+      const kickPitch = new THREE.Euler().setFromQuaternion(relative, 'YXZ').x;
+      const desired = aimFrame.multiply(quaternion().setFromEuler(new THREE.Euler(kickPitch, 0, 0, 'YXZ')));
+      const correction = hipsWorld.clone().invert().multiply(desired).multiply(gunRotation.invert()).multiply(hipsWorld);
+      spine.quaternion.premultiply(correction);
     }
     root.updateMatrixWorld(true);
   }
   function playShot() {
-    if (!preview && shootAction) shootAction.reset().setEffectiveWeight(player.cameraMode === 'first' ? .12 : .65).play();
+    if (!preview && shootAction) shootAction.reset().setEffectiveWeight(player.cameraMode === 'first' ? .18 : .8).play();
   }
 
   const palm = vector(), gripLocal = vector(), weaponDiagnostics = { gripError: 0 };
-  function updateWeapon(gun, { weapon = 'pistol', active = true, aimBlend = 0 } = {}) {
+  function updateWeapon(gun, { weapon = 'pistol', active = true, aimBlend = 0, recoil = 0 } = {}) {
     if (preview) return false;
     if (gun.parent !== scene) scene.add(gun);
     root.visible = !!active; root.position.copy(poseAnchor); visibility(); root.updateMatrixWorld(true);
@@ -120,7 +142,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     if (player.cameraMode === 'first') {
       // Frame the original animated arms as a unit. Moving their common root
       // preserves every authored joint and keeps ADS readable on narrow screens.
-      const desired = vector().set(Math.min(.14, camera.aspect * .11) * (1 - aimBlend), -.24 + (weapon === 'automatic' ? .06 : .10) * aimBlend, -.34 - .04 * aimBlend)
+      const desired = vector().set(Math.min(.14, camera.aspect * .11) * (1 - aimBlend), -.24 + (weapon === 'automatic' ? .06 : .10) * aimBlend - recoil * .02, -.34 - .04 * aimBlend + recoil * .045)
         .applyQuaternion(camera.quaternion).add(player.eyePosition);
       const shift = desired.sub(gun.position);
       root.position.add(shift); gun.position.add(shift); palm.add(shift);
@@ -132,6 +154,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   }
   function setPreviewAnimation(name, time = 0) {
     mixer.stopAllAction(); motion = null;
+    authoredSpine.copy(spine.quaternion);
     if (!name) { preview = null; update(0); return; }
     const clip = clips.find(clip => clip.name === name) || namedClip(clips, name);
     if (!clip) throw new Error(`Animação Sato desconhecida: ${name}`);
