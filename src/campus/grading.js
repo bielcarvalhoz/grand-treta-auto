@@ -91,6 +91,8 @@ export function gradeCampusTerrain(world, terrain, campus) {
   }
   // Marcos levantados em campo (ex.: o Balança semienterrado assenta no nível do estacionamento).
   for (const [id, level] of landmarkPlatformLevels(campus, world, terrain)) frontageLevels.set(id, level);
+  // Prédios que assentam num platô de projeto (ex.: a Agência, no terraço da Portaria Bussocaba).
+  for (const p of plateaus) for (const id of p.buildings || []) frontageLevels.set(id, p.level);
   for (const b of campus.buildings) {
     if (b.structure === 'pergola') continue;
     report.platforms.push(terrain.prepareBuildingPlatform(b, { preserve, level: frontageLevels.get(b.planId || b.id) }));

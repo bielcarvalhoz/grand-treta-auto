@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { labelTexture } from '../shared/textures.js';
-import { ringCentroid, ringArea, SpatialGrid, distToSegment } from '../shared/geo.js';
+import { ringCentroid, ringArea, SpatialGrid, distToSegment, pointInPolygon } from '../shared/geo.js';
 import { createWaterMaterial } from './nature.js';
 
 // Água, muros/grades, semáforos, rótulos de lugares e a "cortina" do limite do bairro.
@@ -233,7 +233,8 @@ export function buildLabels(world, terrain, builders) {
 }
 
 // ---------------------------------------------------------------- limite da Cidade de Deus
-export function buildQuarterBoundary(quarter, terrain) {
+/** `openings`: polígonos de pátios abertos para a rua (frente de portaria), onde a cortina não passa */
+export function buildQuarterBoundary(quarter, terrain, openings = []) {
   const root = new THREE.Group();
   root.name = 'limite-cidade-de-deus';
   if (!quarter) return root;
@@ -247,6 +248,7 @@ export function buildQuarterBoundary(quarter, terrain) {
     for (let k = 0; k < n; k++) {
       const x0 = ax + ((bx - ax) * k) / n, z0 = az + ((bz - az) * k) / n;
       const x1 = ax + ((bx - ax) * (k + 1)) / n, z1 = az + ((bz - az) * (k + 1)) / n;
+      if (openings.some((ring) => pointInPolygon((x0 + x1) / 2, (z0 + z1) / 2, [ring]))) continue;
       const h0 = terrain.heightAt(x0, z0), h1 = terrain.heightAt(x1, z1);
       pos.push(x0, h0, z0, x1, h1, z1, x1, h1 + H, z1, x0, h0, z0, x1, h1 + H, z1, x0, h0 + H, z0);
       alpha.push(1, 1, 0, 1, 0, 0);

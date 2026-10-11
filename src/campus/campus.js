@@ -163,7 +163,7 @@ export function prepareCampus(geo, world, proj) {
     if (g.type === 'Polygon') {
       const rings = g.coordinates.map(toLocal).filter((r) => r.length >= 3);
       if (!rings.length) continue;
-      if (p.kind === 'building') C.buildings.push(rectifyReferenceFootprint({ ...p, rings }));
+      if (p.kind === 'building') C.buildings.push(rectifyReferenceFootprint({ ...p, rings, ...(p.flagAt ? { flagAt: proj.toLocal(p.flagAt[1], p.flagAt[0]) } : {}) }));
       else if (p.kind === 'helideck') C.helideck = { ...p, rings };
       else if (p.kind === 'canopy') C.canopies.push({ ...p, rings });
       else if (p.kind === 'lake') world.areas.push({ id: 'cdd/lago', tags: { name: 'Lago' }, kind: 'water', rings, color: '#47712f', waterColor: 0x4f7a35, lake: true });
@@ -411,6 +411,9 @@ function computeWalls(C, ring, carRoads, RI, insideSolid) {
     g2.lineWidth = (r.w + 2 * SIDEWALK) / RES;
     g2.beginPath(); r.pts.forEach((p, i) => { const [a, b] = P(p); i ? g2.lineTo(a, b) : g2.moveTo(a, b); }); g2.stroke();
   }
+  // pátios abertos para a rua (ex.: frente de uma portaria): ficam fora da região murada
+  g2.fillStyle = '#000';
+  for (const cut of C.wallCutouts || []) { g2.beginPath(); cut.forEach((p, i) => { const [a, b] = P(p); i ? g2.lineTo(a, b) : g2.moveTo(a, b); }); g2.closePath(); g2.fill(); }
   const img = g2.getImageData(0, 0, W, H).data;
   const inside = (i, j) => i >= 0 && j >= 0 && i < W && j < H && img[(j * W + i) * 4] > 127;
 
@@ -487,9 +490,12 @@ function computeWalls(C, ring, carRoads, RI, insideSolid) {
   }
   C.gateList = gates;
   const cutBy = (x, z) => {
+    // passagens de pedestres abertas por quem construiu a portaria
+    for (const o of C.wallOpenings || []) if ((o.a ? distToSegment(x, z, ...o.a, ...o.b).d : Math.hypot(x - o.x, z - o.z)) < o.r) return o;
     for (const g of gates) {
       if (g.segs) {
-        if (Math.hypot(x - g.crossing.x, z - g.crossing.z) > 32) continue;
+        // g.reach: portaria com pátio aberto — o vão fica só junto ao cruzamento, não ao longo da via
+        if (Math.hypot(x - g.crossing.x, z - g.crossing.z) > (g.reach ?? 32)) continue;
         for (const [ax, az, bx, bz] of g.segs) if (distToSegment(x, z, ax, az, bx, bz).d < g.halfGap) return g;
       } else if (g.type === 'pedestre' && g.snap && Math.hypot(x - g.snap[0], z - g.snap[1]) < 1.8) return g;
     }
@@ -658,7 +664,7 @@ function computeParking(C, carRoads, RI, insideSolid, nearWall, treeGrid, stallS
 }
 
 // ================================================================ 2) construir
-export function buildCampus(C, { scene, renderer, terrain, world, roads, quality = 'high' }) {
+export function buildCampus(C, { scene, renderer, terrain, world, roads, rendered, quality = 'high' }) {
   const root = new THREE.Group();
   root.name = 'campus-cidade-de-deus';
   const rnd = mulberry32(777);
@@ -934,8 +940,11 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
     let { x: px, z: pz, tx, tz } = g.center;
     // t aponta para dentro do campus
     if (!pointInPolygon(px + tx * 10, pz + tz * 10, C.quarter)) { tx = -tx; tz = -tz; }
+    // portaria de cobertura única: as cancelas ficam sob ela, onde a pista a atravessa
+    const lane = g.combined && C.portaria?.lanes.find((l) => l.road === r);
+    if (lane) { tx = lane.tx; tz = lane.tz; px = lane.gx - tx * 3; pz = lane.gz - tz * 3; }
     const nx = -tz, nz = tx;
-    const w = r.w, gy = H(px, pz);
+    const w = lane?.gateWidth ?? r.w, gy = H(px, pz);
     const across = yawOf(nx, nz);
     const span = 2 * g.halfGap; // encosta nas pontas do muro
     if (g.type === 'portao') {
@@ -1018,7 +1027,7 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
   const amenities=buildCampusAmenities(C,{renderer,terrain,world,sidewalkHeightAt:roads?.sidewalkHeightAt});
   root.add(amenities.root);
   for(const solid of amenities.solids)builder.addSolid(solid.rings,solid.top,null);
-  const landmarks=buildLandmarks(C,{renderer,terrain,world,roads});
+  const landmarks=buildLandmarks(C,{renderer,terrain,world,roads,rendered});
   root.add(landmarks.root);
   for(const solid of landmarks.solids)builder.addSolid(solid.rings,solid.top,null);
   details.entrances.push(...landmarks.entrances);
@@ -1229,7 +1238,7 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
     for (const o of [-w / 2 + 0.5, w / 2 - 0.5]) cyl('#6f757a', px + A.ux * o, top, pz + A.uz * o, 0.12, 0.12, 1.3, 6);
   }
   function flagpole(b, A, info) {
-    const [px, pz] = A.at(A.uMin - 6, A.vMax + 4);
+    const [px, pz] = b.flagAt ?? A.at(A.uMin - 6, A.vMax + 4);   // flagAt: posição levantada [x, z]
     const gy = H(px, pz);
     cyl('#c9ced2', px, gy, pz, 0.07, 0.1, 10, 8);
     const fg = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshStandardMaterial({ color: RED, side: THREE.DoubleSide }));
@@ -1407,6 +1416,7 @@ function sealTest(C) {
   };
   for (const w of C.walls) for (let i = 0; i < w.length - 1; i++) markSeg(w[i][0], w[i][1], w[i + 1][0], w[i + 1][1]);
   // portarias e portões fechados para o teste
+  for (const [a, b] of C.sealLines || []) markSeg(a[0], a[1], b[0], b[1]);
   for (const g of C.gateList || []) {
     if (g.ends && g.ends.length === 2) markSeg(g.ends[0][0], g.ends[0][1], g.ends[1][0], g.ends[1][1]);
     else if (g.type === 'pedestre') {
@@ -1446,6 +1456,7 @@ function sealTest(C) {
     if (!seen[k]) continue;
     const x = bb.minX + (i + 0.5) * S, z = bb.minZ + (j + 0.5) * S;
     if (!pointInPolygon(x, z, C.quarter) || distRing(x, z) < 25) continue;
+    if ((C.wallCutouts || []).some((cut) => pointInPolygon(x, z, [cut]))) continue; // pátio declarado fora do muro
     leaks++;
     if (leakCell < 0) leakCell = k;
   }

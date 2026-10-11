@@ -141,7 +141,7 @@ export function paintGround(world, bounds, renderer, maxPx = 4096) {
   }
 
   // calçadas sob as vias de carro (a pista em si é uma malha 3D por cima)
-  const carRoads = world.roads.filter((r) => r.kind !== 'foot');
+  const carRoads = world.roads.filter((r) => r.kind !== 'foot' && !r.hidden);   // (hidden: pátio feito por outro módulo)
   g.strokeStyle = '#7c7a73';
   for (const r of carRoads) {
     if (r.kind === 'service' || r.bridge) continue;

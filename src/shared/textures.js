@@ -34,13 +34,15 @@ function toTexture(c, renderer, { repeat = true, srgb = true } = {}) {
 // u (0..1) = atravessa a pista; v = ao longo, 1 repetição = 12 m
 export const ROAD_TILE_M = 12;
 
-export function roadTexture(renderer, kind, lanes = 2) {
+/** `plain`: só o asfalto (mesmo tom e granulado), sem remendos nem faixas — pátios que emendam na via; `base`: outra cor de fundo */
+export function roadTexture(renderer, kind, lanes = 2, { plain = false, base = null } = {}) {
   const W = 256, Hh = 512;
   const c = canvas(W, Hh), g = c.getContext('2d');
-  const asphalt = kind === 'service' ? '#55575a' : '#4a4c50';
+  const asphalt = base ?? (kind === 'service' ? '#55575a' : '#4a4c50');
   g.fillStyle = asphalt;
   g.fillRect(0, 0, W, Hh);
   noise(g, W, Hh, 26, 7 + lanes);
+  if (plain) return toTexture(c, renderer);
   // remendos de asfalto
   const rnd = mulberry32(99 + lanes);
   for (let i = 0; i < 6; i++) {

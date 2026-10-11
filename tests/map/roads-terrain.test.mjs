@@ -263,3 +263,14 @@ test('roads crossing a design plateau take its level and ramp to it within the g
   for (let x = 41; x <= 59; x += 1.5) assert.ok(Math.abs(terrain.roadHeightAt(road, x, 50) - level) < 1e-6, 'flat at the plateau level');
   assert.ok(terrain.roadHeightAt(road, 8, 50) < level && terrain.roadHeightAt(road, 92, 50) > level, 'the hill continues on both sides');
 });
+
+test('a paved yard cuts the sidewalk and kerb exactly at its edge, on its own side of the street', () => {
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ({ fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, putImageData() {}, getImageData: (_x, _y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }) }) }) };
+  const street = { pts: [[10, 50], [90, 50]], name: null, w: 4.5, order: 3, kind: 'service', lanes: 2, tags: {}, internal: true, bridge: false };
+  // pátio do lado +z, de x = 40 a x = 60, entrando 25 cm no leito (polígono convexo)
+  const roads = buildRoads({ roads: [street], sidewalkVoids: [[[40, 52], [60, 52], [60, 62], [40, 62]]] }, { heightAt: () => 3 }, { capabilities: { getMaxAnisotropy: () => 1 } });
+  for (const x of [40.15, 45, 50, 55, 59.85]) for (const z of [52.35, 53.5, 54.6]) assert.equal(roads.sidewalkHeightAt(x, z), -Infinity, `calçada dentro do pátio em ${x}, ${z}`);
+  for (const x of [30, 39.85, 60.15, 70]) for (const z of [52.35, 53.5, 54.6]) assert.ok(Number.isFinite(roads.sidewalkHeightAt(x, z)), `calçada cortada fora do pátio em ${x}, ${z}`);
+  for (const x of [30, 45, 50, 55, 70]) assert.ok(Number.isFinite(roads.sidewalkHeightAt(x, 46.5)), 'o outro lado da rua fica inteiro');
+  delete globalThis.document;
+});
