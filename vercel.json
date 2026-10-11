@@ -1,0 +1,6 @@
+{
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/debug", "destination": "/index.html" }
+  ]
+}

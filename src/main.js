@@ -17,7 +17,8 @@ import { createUI, loading, applyDeviceClasses, createFrontMenu } from './ui/ind
 import { installDebug } from './debug/index.js';
 
 applyDeviceClasses();
-const frontMenu = createFrontMenu();
+const debug = debugOptions();
+const frontMenu = createFrontMenu({ trainingOnly: debug.trainingOnly });
 
 async function main() {
   await loading.status('Baixando dados do OpenStreetMap e relevo...', 3);
@@ -28,7 +29,7 @@ async function main() {
   // This also protects the opening if a future loader returns cached objects.
   await frontMenu.introFinished;
 
-  const game = createGame({ quality: detectQuality(frontMenu.settings), settings: frontMenu.settings, audio: frontMenu.audio, debug: debugOptions(), status: loading.status, container: document.getElementById('app') });
+  const game = createGame({ quality: detectQuality(frontMenu.settings), settings: frontMenu.settings, audio: frontMenu.audio, debug, status: loading.status, container: document.getElementById('app') });
 
   const campus = createCampusPlugin(game, campusGeo);
   game.map = await buildMap(game, { data: mapData, plugins: [campus] });

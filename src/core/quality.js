@@ -1,4 +1,5 @@
 import { loadSettings } from './settings.js';
+import { isTrainingDebugPath } from '../shared/routes.js';
 
 export const IS_TOUCH = typeof window !== 'undefined' && (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window);
 
@@ -20,5 +21,5 @@ export function detectQuality(settings = loadSettings()) {
 
 export function debugOptions() {
   const params = new URLSearchParams(location.search);
-  return { inspectionView: import.meta.env.DEV ? params.get('inspect') : null };
+  return { trainingOnly: isTrainingDebugPath(location.pathname), inspectionView: import.meta.env.DEV ? params.get('inspect') : null };
 }

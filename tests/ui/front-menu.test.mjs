@@ -62,6 +62,15 @@ test('game modes wait for readiness; settings are usable and restart requires co
     assert.match(el('restart-description').textContent,/voltará ao menu/);
     el('settings-confirm-restart').dispatchEvent(new Event('click'));
     assert.equal(reloads,1); assert.deepEqual(saved,[{quality:'low',surroundings:'off',music:false,effects:true}]);
+    els.clear();
+    const debugMenu = createFrontMenu({ trainingOnly: true }), debugModes = [];
+    assert.equal(el('play').hidden, true); assert.equal(el('tour').hidden, true);
+    debugMenu.ready({ ui: { startMode: (mode, touch) => debugModes.push({ mode, touch }) } });
+    assert.deepEqual(debugModes, [{ mode: 'training', touch: false }], 'debug URL enters training directly');
+    el('play').dispatchEvent(new Event('click')); el('tour').dispatchEvent(new Event('click'));
+    assert.equal(debugModes.length, 1, 'debug entry must not offer campaign/tour navigation');
+    el('training').dispatchEvent(new Event('click'));
+    assert.equal(debugModes.length, 2); assert.equal(debugModes.at(-1).mode, 'training');
   } finally {
     for (const [k, value] of Object.entries(originals)) { if (value === undefined) delete globalThis[k]; else globalThis[k] = value; }
   }

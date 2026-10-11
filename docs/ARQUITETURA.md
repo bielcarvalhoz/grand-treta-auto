@@ -43,7 +43,11 @@ no mundo pelo encaixe da mão direita; retorna se a pose foi aplicada.
 rotação XYZ em graus e escala XYZ como multiplicador. `player/pose-config.js` mantém
 os encaixes por arma/perspectiva e o enquadramento dos braços por arma na primeira
 pessoa, persistidos no navegador. `ui/training-pose.js` acessa essa API pelo contexto
-`game`, sem importar internals do personagem. `game.ui.posePanel` abre/fecha o painel;
+`game`, sem importar internals do personagem. `game.ui.posePanel` abre/fecha o painel
+somente em `/debug`; nas demais URLs é `null` e o painel/atalho não são montados.
+`core.debugOptions().trainingOnly` identifica essa rota em produção e desenvolvimento;
+o menu inicia automaticamente no treino e não oferece campanha/tour. A Vercel
+reescreve `/debug` para o HTML da aplicação, com assets a partir da raiz.
 o cartão para print e o JSON identificam arma, vista, alvo e unidades. Ajustes do
 encaixe são aplicados depois do enquadramento automático, sem serem anulados por ele.
 `player.releasePointerForUI()` solta o cursor mantendo o treino ativo para desktop.
@@ -104,8 +108,11 @@ e o movimento aditivo dos braços de espada, com amplitude reduzida e ombros
 fora do enquadramento. A guarda fica mais à direita/abaixo, com braços e arma
 reduzidos juntos nessa vista; todas as lâminas e cabos inclinam para frente.
 A terceira pessoa conserva a pose e o golpe de espada completos.
-Os socos em primeira pessoa usam a guarda frontal, os dedos do clipe de soco e
-o delta dos braços dos golpes Jab/Cross; os ombros ficam atrás do plano próximo.
+Os socos em primeira pessoa usam a mesma guarda de soco e os clipes completos
+Jab/Cross da terceira pessoa. `player/first-person-fists.js` adapta os dois ossos
+de cada braço aos pulsos animados, preservando a orientação das mãos e reforçando
+a curvatura dos dedos nessa vista, com o início dos braços fora da tela. A pose original é restaurada antes
+de cada avaliação, inclusive ao trocar câmera/arma ou atualizar o mesmo quadro.
 Melee e socos compensam a rotação herdada do quadril e mantêm a cabeça na orientação
 ereta de repouso em terceira pessoa. O encaixe reavalia o rig sem avançar o tempo
 quando a câmera muda entre quadros; o balanço em primeira pessoa tem 35% da amplitude

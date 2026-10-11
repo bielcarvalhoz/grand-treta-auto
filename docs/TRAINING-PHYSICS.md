@@ -2,20 +2,29 @@
 
 ## Usar no celular
 
-1. Abra **Modo treino → Ajustar mãos / armas** (`B` no teclado).
+1. Abra **`/debug` → Ajustar mãos / armas** (`B` no teclado). A URL entra diretamente no treino e oferece apenas treino/configurações. O treino normal não monta o painel.
 2. Selecione arma e perspectiva. O seletor equipa diretamente a arma no slot correspondente para facilitar a calibração.
 3. **Arma nas mãos**: posição relativa aos eixos locais da mão direita, rotação XYZ em graus e escala XYZ. Os valores são offsets/multiplicadores sobre o encaixe padrão, e primeira/terceira pessoa são independentes.
 4. **Braços na câmera**: enquadramento dos dois braços em primeira pessoa, por arma; `X` é direita, `Y` é cima e `Z` positivo aproxima da câmera. Inclui socos. A rotação e escala afetam o conjunto, preservando o encaixe.
 5. Toque num número e use `− / +`, ou digite. Passos: 0,01 m, 1 grau, 0,01 de escala. As alterações ficam salvas neste navegador.
 6. **Preparar print** mostra cartão compacto com nome e ID, perspectiva, alvo e nove valores. Envie o print com o enquadramento do jogo. **Copiar config** fornece JSON com as mesmas informações e unidades. **Restaurar** afeta só a arma/vista/alvo selecionados.
 
-O painel fecha ao sair do treino. Os valores calibrados continuam aplicados ao voltar e na campanha. O slot é alterado apenas no seletor de arma; câmera e configuração de braços não substituem o inventário.
+O painel fecha ao abrir o menu. Os valores calibrados continuam aplicados ao voltar, no treino normal e na campanha. O slot é alterado apenas no seletor de arma; câmera e configuração de braços não substituem o inventário. **Restaurar** retorna aos padrões abaixo. Ajustes anteriores são migrados sem somar os novos padrões aos valores já salvos.
+
+## Padrões aprovados nos prints
+
+| Armas | Vista | Posição XYZ (m) | Rotação XYZ (°) | Escala XYZ |
+| --- | --- | --- | --- | --- |
+| Machado e bastão | 1ª | -0,03; -0,14; -0,10 | 29; -8; 68 | 1; 1; 1 |
+| Machado e bastão | 3ª | -0,02; -0,01; -0,06 | -44; -56; 45 | 0,99; 1; 1 |
+| Todas as facas | 1ª | -0,01; 0; 0,02 | 78; 9; -29 | 1; 1; 1,03 |
+| Todas as facas | 3ª | 0; -0,01; 0,02 | -64; -62; -33 | 1; 1; 1 |
 
 ## Diagnósticos e correções
 
 - **Piso acima do campo:** `Collider.castRay` retorna `-1` quando não há interseção. O código aceitava qualquer valor diferente de `null`, convertendo o erro em `topoDaCaixa + 2`, mesmo longe da caixa. Agora filtra limites X/Z e exige distância finita não negativa. Inclui o caso de caixa girada, em que o raio passa dentro do AABB mas fora do corpo. Nenhum arquivo de mapa/campus, terreno ou visual foi alterado.
 - **Tremor das mãos:** reproduzido ao mudar câmera e atualizar o encaixe antes do próximo quadro: o rig permanecia na câmera anterior, provocando saltos de 3–4 cm. A pose é reavaliada em `dt = 0` quando câmera/olhos mudam. O balanço intencional em primeira pessoa foi reduzido a 35%, mantendo a terceira pessoa.
-- **Soco em primeira pessoa:** a guarda original deixava uma mão fora da tela vertical e expunha o início dos braços. Guarda frontal e deltas de golpes mantêm mãos visíveis e ombros atrás do plano próximo. A articulação dos dedos vem dos clipes do asset. O painel permite alterar o enquadramento.
+- **Soco em primeira pessoa:** usa a guarda `Punch_Enter` e os golpes completos `Punch_Jab`/`Punch_Cross`, sem a pose de pistola. `first-person-fists.js` adapta a cadeia de dois ossos dos braços aos pulsos animados, trazendo as mãos para a tela e mantendo o início dos braços abaixo/fora do enquadramento. A orientação dos punhos vem dos clipes originais; a curvatura dos dedos é reforçada nessa vista para fechar as mãos. O painel permite alterar o enquadramento depois dessa adaptação. A terceira pessoa mantém os clipes originais.
 - **Cabeça baixa em melee/soco:** a inclinação do quadril e do clipe superior chegava à cabeça. A cadeia superior compensa o quadril e a cabeça usa a orientação ereta de repouso; golpes e pernas mantêm a animação.
 - **Polegares:** pequeno enchimento skinned, fundido às duas malhas das mãos. Mantém materiais e número de meshes/draw calls, e preserva o arquivo GLB original.
 - **Caixas:** madeira de 6 kg, 1,20 m de lado; metal de 72 kg, 1,60 m, 5,6 m à direita e 1 m atrás da madeira. Impulsos são multiplicados por 4 nos tiros e 4,5 nos golpes; dano/cadência das armas permanecem os mesmos. Mesmo impacto produz 12 vezes mais velocidade na madeira antes do atrito. Metal fica fora do círculo de coleta da campanha e da faixa de armas do treino.
