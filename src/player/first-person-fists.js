@@ -3,12 +3,13 @@ import * as THREE from 'three';
 const v = () => new THREE.Vector3();
 const q = () => new THREE.Quaternion();
 
-/** Retarget the authored boxing wrists onto arms entering from below the camera.
- * Jab/cross trajectories come from the original punch clips; tighten their
- * loose finger curl into a closed fist for the close first-person view. */
+/** Frame the authored boxing motion on arms entering from below the camera.
+ * A fixed camera-local mapping preserves the clips' advance/recovery instead
+ * of clipping each wrist or dragging the shoulder along with the fist. */
 export function createFirstPersonFists(root, bones) {
   const arms = ['R', 'L'].map(side => ({
     sign: side === 'R' ? 1 : -1,
+    viewOffset: v().set(side === 'L' ? -.03 : 0, side === 'R' ? -.12 : -.065, -.30),
     upper: bones[`DEF-upper_arm${side}`], fore: bones[`DEF-forearm${side}`], hand: bones[`DEF-hand${side}`],
     position: v(), upperRotation: q(), foreRotation: q(), handRotation: q(),
     curls: ['index', 'middle', 'ring', 'pinky'].flatMap(finger => [1, 2, 3].map((joint, i) => ({
@@ -39,19 +40,22 @@ export function createFirstPersonFists(root, bones) {
     const toWorld = point => point.applyQuaternion(camera.quaternion).add(eye);
     const toView = point => point.sub(eye).applyQuaternion(camera.quaternion.clone().invert());
     const horizontal = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    // Fit the entire punch envelope, not its current frame. In portrait the
+    // lateral travel is narrower; depth and timing stay identical in both orientations.
+    const viewScale = v().set(Math.min(.5, horizontal * .9), .6, .5);
+    const framePoint = (bone, offset) => toView(bone.getWorldPosition(v())).multiply(viewScale).add(offset);
     for (const arm of arms) {
-      const { upper, fore, hand, sign } = arm;
+      const { upper, fore, hand, sign, viewOffset } = arm;
       arm.position.copy(upper.position); arm.upperRotation.copy(upper.quaternion);
       arm.foreRotation.copy(fore.quaternion); arm.handRotation.copy(hand.quaternion);
       for (const curl of arm.curls) curl.rotation.copy(curl.bone.quaternion);
       const wristRotation = hand.getWorldQuaternion(q());
       const upperLength = upper.getWorldPosition(v()).distanceTo(fore.getWorldPosition(v()));
       const foreLength = fore.getWorldPosition(v()).distanceTo(hand.getWorldPosition(v()));
-      const wrist = toView(hand.getWorldPosition(v()));
-      wrist.z = THREE.MathUtils.clamp(wrist.z, -.72, -.42);
-      wrist.x = THREE.MathUtils.clamp(wrist.x * .5, wrist.z * horizontal * .6, -wrist.z * horizontal * .6);
-      wrist.y = THREE.MathUtils.clamp(wrist.y, -.28, -.10);
-      const shoulder = wrist.clone().add(v().set(sign * .20, -.32, .30));
+      const wrist = framePoint(hand, viewOffset);
+      // Keep the authored shoulder/torso motion independent of the wrist. The
+      // elbow can then unfold on impact and bend again during the recovery.
+      const shoulder = framePoint(upper, viewOffset).add(v().set(0, -.26, .16));
       const target = toWorld(wrist), start = toWorld(shoulder);
       upper.position.copy(upper.parent.worldToLocal(start.clone()));
       upper.updateWorldMatrix(false, true);
