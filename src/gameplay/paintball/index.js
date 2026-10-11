@@ -57,7 +57,7 @@ export function createPaintballModule(game) {
     $('btn-aim').setAttribute('aria-pressed', String(paintball.aiming));
   };
   $('btn-aim').addEventListener('click', () => setAiming(!paintball.aiming));
-  game.input.bind('KeyC', () => { nextPaintColor(); game.toast(`Tinta: ${paintball.color.label}`); }, { label: 'cor da tinta' });
+  game.input.bind('KeyV', () => { nextPaintColor(); game.toast(`Tinta: ${paintball.color.label}`); }, { label: 'cor da tinta' });
 
   // Pistola: clique sem arrastar no fallback. Metralhadora: segurar também
   // dispara enquanto olha arrastando quando o navegador bloqueia pointer lock.
@@ -87,6 +87,13 @@ export function createPaintballModule(game) {
   const clearPaintPointer = () => {
     paintPointer = null; mouseHeld = false; setTrigger(false); setAiming(false); paintball.resetInput();
   };
+  const toggleHolstered = () => {
+    if (!player.active || !paintEnabled()) return;
+    clearPaintPointer(); paintball.setHolstered(!paintball.holstered);
+    game.toast(paintball.holstered ? 'Desarmado' : `Equipada: ${paintball.weapon.label}`);
+  };
+  game.input.bind('KeyZ', toggleHolstered, { label: 'desarmar / equipar novamente' });
+  $('btn-holster').addEventListener('click', toggleHolstered);
   window.addEventListener('pointercancel', clearPaintPointer);
   window.addEventListener('blur', clearPaintPointer);
   window.addEventListener('resize', clearPaintPointer);

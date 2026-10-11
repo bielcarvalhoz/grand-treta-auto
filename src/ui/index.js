@@ -47,7 +47,7 @@ export function createUI(game) {
     if (touch) document.body.classList.add('touch');
     document.body.classList.toggle('flying', player.fly);
     $('btn-fly').setAttribute('aria-pressed', String(player.fly));
-    help.textContent = `WASD andar · Shift correr · Espaço pular · Segurar: atacar · Segure Q: armas · E pegar · X câmera${mode === 'training' ? '' : ' · F voar · M mapa'} · H esconder`;
+    help.textContent = `WASD andar · Shift correr · Espaço pular · C agachar · Z desarmar · Segurar: atacar · Segure Q: armas · E pegar · V tinta · X câmera${mode === 'training' ? '' : ' · F voar · M mapa'} · H esconder`;
     game.events.emit('modechange', mode);
     player.start(touch);
   }
@@ -120,6 +120,18 @@ export function createUI(game) {
   player.setCameraMode($('camera-mode').value);
   syncCameraMode();
   game.input.bind('KeyX', toggleCamera, { label: 'primeira / terceira pessoa' });
+  const syncCrouch = () => {
+    $('btn-crouch').setAttribute('aria-pressed', String(player.crouched));
+    $('btn-crouch').setAttribute('aria-label', player.crouched ? 'Levantar' : 'Agachar');
+  };
+  const toggleCrouch = () => {
+    if (!walkingMode() || !player.active || weaponWheel.open || mapPanel.classList.contains('open') || player.fly) return;
+    player.toggleCrouch(); syncCrouch(); toast(player.crouched ? 'Agachado' : 'Em pé');
+  };
+  $('btn-crouch').addEventListener('click', toggleCrouch);
+  player.events.addEventListener('crouch', syncCrouch);
+  game.input.bind('KeyC', toggleCrouch, { label: 'agachar / levantar' });
+  syncCrouch();
   engine.renderer.domElement.addEventListener('wheel', event => {
     if (sniperScope.handleWheel(event)) return;
     if (!walkingMode() || !player.active || weaponWheel.open || mapPanel.classList.contains('open') || event.ctrlKey || !event.deltaY) return;

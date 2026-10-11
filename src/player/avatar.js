@@ -75,6 +75,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   const socketRotation = rightHand.getWorldQuaternion(quaternion()).invert();
   const spine = bones['DEF-spine001'], hips = spine.parent;
   const hipsReference = model.getWorldQuaternion(quaternion()).invert().multiply(hips.getWorldQuaternion(quaternion()));
+  const standingHipPosition = root.worldToLocal(hips.getWorldPosition(vector()));
   sampler.stopAllAction(); sampler.uncacheRoot(model);
   const aimLimits = ['Pistol_Aim_Up', 'Pistol_Aim_Down'].map(name => {
     sampler.clipAction(namedClip(clips, name) || neutral).play(); sampler.setTime(0); root.updateMatrixWorld(true);
@@ -101,10 +102,10 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   const swordSocket = swordPose.rotation.multiply(quaternion().setFromAxisAngle(vector().set(1, 0, 0), Math.PI / 2));
   const firstSwordSocket = socketRotation.clone().multiply(quaternion().setFromAxisAngle(vector().set(1, 0, 0), .35));
 
-  const lowerActions = new Map(); let motion = null, preview = null;
+  const lowerActions = new Map(); let motion = null, motionFullBody = false, preview = null;
   function layer(clip, upper) {
-    return mixer.clipAction(new THREE.AnimationClip(`${upper ? 'upper' : 'lower'}-${clip.name}`, clip.duration,
-      clip.tracks.filter(track => upperTrack.test(track.name) === upper), clip.blendMode));
+    return mixer.clipAction(new THREE.AnimationClip(`${upper === null ? 'body' : upper ? 'upper' : 'lower'}-${clip.name}`, clip.duration,
+      clip.tracks.filter(track => upper === null || upperTrack.test(track.name) === upper), clip.blendMode));
   }
   const aimActions = ['Pistol_Aim_Neutral', 'Pistol_Aim_Up', 'Pistol_Aim_Down'].map(name => {
     const action = layer(namedClip(clips, name) || neutral, true);
@@ -129,29 +130,35 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   const authoredSpine = spine.quaternion.clone();
   const evaluatedCamera = quaternion(), evaluatedEye = vector();
   const firstPersonFists = createFirstPersonFists(root, bones);
-  function setMotion(name, speed) {
-    if (!lowerActions.has(name)) {
+  function setMotion(name, speed, fullBody = false) {
+    const key = `${fullBody ? 'body' : 'lower'}-${name}`;
+    if (!lowerActions.has(key)) {
       const clip = namedClip(clips, name) || namedClip(clips, 'Idle_Loop');
-      lowerActions.set(name, layer(clip, false));
+      lowerActions.set(key, layer(clip, fullBody ? null : false));
     }
-    const next = lowerActions.get(name);
+    const next = lowerActions.get(key);
     if (motion !== next) {
       next.reset().setEffectiveWeight(1).play();
-      if (motion) motion.crossFadeTo(next, .16, false);
-      motion = next;
+      // When ownership of the upper body changes, the weapon layer switches
+      // immediately too. Avoid fading from an absent upper layer into bind pose.
+      if (motion) {
+        if (motionFullBody === fullBody) motion.crossFadeTo(next, .16, false);
+        else motion.stop();
+      }
+      motion = next; motionFullBody = fullBody;
     }
     next.setEffectiveTimeScale(speed);
     animationState.motion = name;
   }
   function visibility() {
     for (const mesh of meshes) {
-      mesh.visible = !!preview || player.cameraMode === 'third' || (!scopedView && /Sato_arm_hand_[LR]/.test(mesh.name));
+      mesh.visible = !!preview || player.cameraMode === 'third' || (heldKind !== 'relaxed' && !scopedView && /Sato_arm_hand_[LR]/.test(mesh.name));
       mesh.castShadow = player.cameraMode === 'third';
     }
   }
   function update(dt) {
     firstPersonFists.restore();
-    root.scale.setScalar(!preview && player.cameraMode === 'first' && heldKind === 'melee' ? MELEE_VIEW_SCALE : 1);
+    root.scale.setScalar(!preview && !player.fly && player.cameraMode === 'first' && heldKind === 'melee' ? MELEE_VIEW_SCALE : 1);
     root.position.copy(player.feet);
     if (player.cameraMode === 'first' && !preview) {
       root.quaternion.copy(camera.quaternion);
@@ -164,12 +171,14 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     if (preview) mixer.setTime(preview.time);
     else {
       const speed = Math.hypot(player.velocity.x, player.velocity.z);
+      const flying = !!player.fly, fullBody = flying || heldKind === 'relaxed';
       const airborne = !player.grounded && player.active;
-      const gait = GAITS[gaitForSpeed(speed)];
-      setMotion(airborne ? 'Jump_Loop' : gait.clip, airborne || !gait.speed ? 1 : speed / gait.speed);
+      const gait = GAITS[gaitForSpeed(speed, player.crouched && !flying)];
+      setMotion(flying ? 'Swim_Fwd_Loop' : airborne ? 'Jump_Loop' : gait.clip, flying ? 1.2 : airborne || !gait.speed ? 1 : speed / gait.speed, fullBody);
       const frameDt = Math.min(.05, Math.max(0, dt));
-      const firstMelee = heldKind === 'melee' && player.cameraMode === 'first';
+      const firstMelee = !fullBody && heldKind === 'melee' && player.cameraMode === 'first';
       const firstAttack = firstMelee;
+      if (fullBody) { stopAttack(); shootAction?.stop(); }
       if (attack) {
         attack.elapsed += frameDt;
         if (attack.elapsed >= attack.duration) stopAttack();
@@ -179,26 +188,26 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
         attack.action.setEffectiveWeight(firstAttack ? 0 : Math.max(0, attackWeight));
         attack.firstAction?.setEffectiveWeight(firstAttack ? Math.max(0, attackWeight) * .65 : 0);
       }
-      swordIdle.play().setEffectiveWeight(heldKind === 'melee' && !firstMelee ? 1 - attackWeight : 0);
-      punchIdle.play().setEffectiveWeight(heldKind === 'unarmed' ? 1 - attackWeight : 0);
+      swordIdle.play().setEffectiveWeight(!fullBody && heldKind === 'melee' && !firstMelee ? 1 - attackWeight : 0);
+      punchIdle.play().setEffectiveWeight(!fullBody && heldKind === 'unarmed' ? 1 - attackWeight : 0);
       // First-person shoulders already rotate with the eyes. Third person uses
       // the supplied up/down aim poses without twisting the bones by hand.
       const pitch = player.cameraMode === 'third' ? new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ').x : 0;
       const amount = THREE.MathUtils.clamp(Math.abs(pitch) / aimLimits[pitch > 0 ? 0 : 1], 0, 1);
       const weights = [1 - amount, pitch > 0 ? amount : 0, pitch < 0 ? amount : 0];
-      aimActions.forEach((action, i) => { action.play(); action.setEffectiveWeight(heldKind === 'firearm' || firstMelee ? weights[i] : 0); });
+      aimActions.forEach((action, i) => { action.play(); action.setEffectiveWeight(!fullBody && (heldKind === 'firearm' || firstMelee) ? weights[i] : 0); });
       if (heldKind !== 'firearm') shootAction?.stop();
       spine.quaternion.copy(authoredSpine);
       // Controller advances this phase by actual displacement. Sound events and
       // the two planted feet therefore share a cycle even when changing speed.
-      if (!airborne && gait.speed && player.locomotion) {
+      if (!flying && !airborne && gait.speed && player.locomotion) {
         motion.time = (player.locomotion.phase % 1) * motion.getClip().duration - frameDt * motion.getEffectiveTimeScale();
       }
       mixer.update(frameDt);
       authoredSpine.copy(spine.quaternion);
       // Legs retain their gait, while the aiming torso cancels inherited hip
       // rotation. Stabilize the whole arm chain, never the wrists/fingers alone.
-      {
+      if (!fullBody) {
         root.updateMatrixWorld(true);
         const hipsWorld = hips.getWorldQuaternion(quaternion());
         spine.quaternion.premultiply(hipsWorld.clone().invert().multiply(model.getWorldQuaternion(quaternion())).multiply(hipsReference));
@@ -220,7 +229,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
       }
       // Boxing/sword clips tilt the neck with the crouched guard. Preserve the
       // attack below it, while keeping the face at the upright rest orientation.
-      if (heldKind !== 'firearm' && player.cameraMode === 'third' && head && uprightHead) {
+      if (!fullBody && heldKind !== 'firearm' && player.cameraMode === 'third' && head && uprightHead) {
         root.updateMatrixWorld(true);
         head.quaternion.copy(head.parent.getWorldQuaternion(quaternion()).invert()
           .multiply(root.quaternion).multiply(uprightHead));
@@ -230,21 +239,21 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     root.updateMatrixWorld(true);
   }
   function playShot(strength = 1) {
-    if (!preview && heldKind === 'firearm' && shootAction) {
+    if (!preview && !player.fly && heldKind === 'firearm' && shootAction) {
       const amount = Math.max(0, Number(strength) || 1);
       shootAction.reset().setEffectiveWeight(player.cameraMode === 'first' ? Math.min(.55, .18 * amount) : Math.min(1.8, .8 * amount)).play();
     }
   }
   function setWeapon(weapon) {
-    const nextKind = kindOf(weapon), nextId = weapon?.id || weapon || 'pistol';
-    if (nextId !== heldWeapon) stopAttack();
+    const nextKind = weapon?.holstered ? 'relaxed' : kindOf(weapon), nextId = weapon?.id || weapon || 'pistol';
+    if (nextId !== heldWeapon || nextKind !== heldKind) stopAttack();
     heldKind = nextKind; heldWeapon = nextId; animationState.kind = heldKind;
   }
   function stopAttack() {
     attack?.action.stop(); attack?.firstAction?.stop(); attack = null; animationState.attack = null;
   }
   function playAttack(weapon, { sequence } = {}) {
-    if (preview) return null;
+    if (preview || player.fly) return null;
     setWeapon(weapon);
     if (heldKind === 'firearm') { playShot(); return null; }
     const name = heldKind === 'melee' ? 'Sword_Attack' : (sequence ?? punchSequence++) % 2 ? 'Punch_Cross' : 'Punch_Jab';
@@ -275,23 +284,27 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   }
 
   const palm = vector(), gripLocal = vector(), weaponDiagnostics = { gripError: 0 };
-  function updateWeapon(gun, { weapon = 'pistol', kind = kindOf(weapon), active = true, aimBlend = 0, recoil = 0, scoped = false } = {}) {
+  function updateWeapon(gun, { weapon = 'pistol', kind = kindOf(weapon), holstered = false, active = true, aimBlend = 0, recoil = 0, scoped = false } = {}) {
     if (preview) return false;
-    const changedKind = heldKind !== kind;
-    setWeapon({ id: weapon?.id || weapon, kind }); currentAimBlend = aimBlend; scopedView = !!scoped;
+    const changedKind = heldKind !== (holstered ? 'relaxed' : kind);
+    setWeapon({ id: weapon?.id || weapon, kind, holstered }); currentAimBlend = aimBlend; scopedView = !!scoped;
     // Input can move the camera and fire between render frames. Re-evaluate the
     // rig at the same camera transform before sampling its socket (no time step).
     if (changedKind || evaluatedCamera.angleTo(camera.quaternion) > 1e-7 || evaluatedEye.distanceToSquared(player.eyePosition) > 1e-12) update(0);
     firstPersonFists.restore();
     if (gun.parent !== scene) scene.add(gun);
     root.visible = !!active;
-    root.scale.setScalar(player.cameraMode === 'first' && heldKind === 'melee' ? MELEE_VIEW_SCALE : 1);
+    const fullBody = player.fly || heldKind === 'relaxed';
+    root.scale.setScalar(!fullBody && player.cameraMode === 'first' && heldKind === 'melee' ? MELEE_VIEW_SCALE : 1);
     if (player.cameraMode === 'first') root.quaternion.copy(camera.quaternion);
     root.position.copy(poseAnchor); visibility(); root.updateMatrixWorld(true);
     const armConfig = poseConfig.get(heldWeapon, 'first', 'arms');
-    const firstPunch = heldKind === 'unarmed' && player.cameraMode === 'first';
-    if (firstPunch) firstPersonFists.frame(camera, player.eyePosition, punchPose.center, armConfig);
-    else if (player.cameraMode === 'first') {
+    // The camera already lowers with crouch. Keep its guard independent of the
+    // authored hip drop/backward shift, while the world model keeps that motion.
+    const stanceOffset = player.crouched ? root.worldToLocal(hips.getWorldPosition(vector())).sub(standingHipPosition) : vector();
+    const firstPunch = !fullBody && heldKind === 'unarmed' && player.cameraMode === 'first';
+    if (firstPunch) firstPersonFists.frame(camera, player.eyePosition, punchPose.center.clone().add(stanceOffset), armConfig);
+    else if (!fullBody && player.cameraMode === 'first') {
       // Apply camera-local framing to the complete rig, keeping both arms and
       // the weapon socket together, including during the authored punches.
       const delta = quaternion().setFromEuler(new THREE.Euler(...['x', 'y', 'z'].map(axis => THREE.MathUtils.degToRad(armConfig.rotation[axis]))));
@@ -300,7 +313,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
       root.updateMatrixWorld(true);
     }
     const handRotation = rightHand.getWorldQuaternion(quaternion());
-    const firstMelee = heldKind === 'melee' && player.cameraMode === 'first';
+    const firstMelee = !fullBody && heldKind === 'melee' && player.cameraMode === 'first';
     gun.quaternion.copy(handRotation).multiply(heldKind === 'melee' ? firstMelee ? firstSwordSocket : swordSocket : socketRotation);
     const gripRotation = gun.userData.weaponGripRotation;
     if (gripRotation?.isQuaternion) gun.quaternion.multiply(gripRotation);
@@ -313,7 +326,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     else gripLocal.set(0, weapon === 'automatic' ? -.15 : -.13, weapon === 'automatic' ? .065 : .08);
     const socketOffset = vector().set(socketConfig.position.x, socketConfig.position.y, socketConfig.position.z).applyQuaternion(handRotation);
     gun.position.copy(palm).sub(gripLocal.clone().multiply(gun.scale).applyQuaternion(gun.quaternion));
-    if (player.cameraMode === 'first' && !firstPunch) {
+    if (!fullBody && player.cameraMode === 'first' && !firstPunch) {
       // Frame the original animated arms as a unit. Moving their common root
       // preserves every authored joint and keeps ADS readable on narrow screens.
       const firearm = heldKind === 'firearm';
@@ -324,7 +337,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
         .applyQuaternion(camera.quaternion).add(player.eyePosition);
       // Center only the idle hand anchor for sword/punches. Re-centering the
       // animated weapon each frame would erase the visible first-person swing.
-      const anchor = firstMelee ? neutralPose.palm : firearm ? neutralPose.center : punchPose.center;
+      const anchor = (firstMelee ? neutralPose.palm : firearm ? neutralPose.center : punchPose.center).clone().add(stanceOffset);
       // Frame the hands independently of debug socket offsets, so editing a
       // firearm's offset cannot be cancelled by automatic camera framing.
       const shift = desired.sub(firearm ? gun.position : root.localToWorld(anchor.clone()));

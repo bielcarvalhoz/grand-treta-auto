@@ -150,9 +150,9 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
   const raycaster = new THREE.Raycaster(), forward = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3(), shotOrigin = new THREE.Vector3();
   let colorIndex = 2, projectileIndex = 0, markIndex = 0, cooldown = 0, recoil = 0, recoilDecay = 16, shots = 0, disposed = false;
   let weaponIndex = 0, trigger = false, aiming = false, aimBlend = 0, attackSequence = 0, pendingAttack = null, pendingShot = null;
-  let weaponModels = null;
+  let weaponModels = null, holstered = false;
   let scopeZoom = 2;
-  const scoped = () => !disposed && !!getActive() && aiming && PAINTBALL_WEAPONS[weaponIndex].id === 'sniper' && getCameraMode() === 'first';
+  const scoped = () => !disposed && !holstered && !!getActive() && aiming && PAINTBALL_WEAPONS[weaponIndex].id === 'sniper' && getCameraMode() === 'first';
   const baseFov = camera.fov;
   const restoreView = () => {
     aiming = false; aimBlend = 0;
@@ -175,7 +175,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
   function poseWeapon() {
     const weapon = PAINTBALL_WEAPONS[weaponIndex];
     const scopeActive = scoped();
-    if (!updateWeaponPose?.(gun, { aimBlend, recoil, weapon: weapon.id, kind: weapon.kind, active: !!getActive(), scoped: scopeActive })) {
+    if (!updateWeaponPose?.(gun, { aimBlend, recoil, weapon: weapon.id, kind: weapon.kind, holstered, active: !!getActive(), scoped: scopeActive })) {
       gun.position.x = Math.min(.34, .32 * camera.aspect) * (1 - aimBlend);
       gun.position.y = -.34 + aimBlend * .27;
       gun.position.z = -.62 + recoil * .045 - aimBlend * .18;
@@ -183,7 +183,16 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
     }
     // Keep updating the hidden socket: scoped shots still originate at the
     // muzzle and use the same collision/aim path as every other firearm.
-    gun.visible = !!getActive() && !scopeActive;
+    gun.visible = !!getActive() && !scopeActive && !holstered;
+  }
+
+  function resetInput() {
+    trigger = false; pendingAttack = pendingShot = null; restoreView();
+  }
+
+  function setHolstered(value) {
+    holstered = !!value; resetInput(); recoil = 0; poseWeapon();
+    return holstered;
   }
 
   function clearEffects() {
@@ -257,7 +266,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
   }
 
   function shoot() {
-    if (disposed || !getActive() || cooldown > 0) return false;
+    if (disposed || holstered || !getActive() || cooldown > 0) return false;
     const weapon = PAINTBALL_WEAPONS[weaponIndex]; cooldown = weapon.interval;
     if (weapon.kind !== 'firearm') {
       recoil = 1; recoilDecay = 16; pendingAttack = { weapon, remaining: weapon.interval * .28 };
@@ -268,7 +277,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
   }
 
   function setTrigger(pressed) {
-    if (disposed || !getActive()) { trigger = false; pendingShot = null; return; }
+    if (disposed || holstered || !getActive()) { trigger = false; pendingShot = null; return; }
     // A tap commits one shot, including its trigger preparation. Releasing
     // stops repetition; explicit resets/switches still cancel pending shots.
     if (!pressed) { trigger = false; return; }
@@ -280,7 +289,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
     const index = typeof value === 'number' ? value : PAINTBALL_WEAPONS.findIndex(w => w.id === value);
     if (!Number.isInteger(index) || index < 0 || index >= PAINTBALL_WEAPONS.length) throw new RangeError('Arma inválida');
     inventory.select(PAINTBALL_WEAPONS[index].id);
-    trigger = false; pendingAttack = pendingShot = null; weaponIndex = index;
+    trigger = false; pendingAttack = pendingShot = null; weaponIndex = index; holstered = false;
     for (const [id, parent] of Object.entries(weaponParents)) parent.visible = id === PAINTBALL_WEAPONS[index].id;
     if (PAINTBALL_WEAPONS[index].kind !== 'firearm') restoreView();
     const loaded = weaponModels?.[PAINTBALL_WEAPONS[index].id];
@@ -380,13 +389,12 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
 
   gun.visible = !!getActive();
   return {
-    root, gun, update, shoot, setColor, setTrigger, setWeapon, setWeaponModels, clearEffects, palette: PAINTBALL_PALETTE, weapons: PAINTBALL_WEAPONS, dispose,
+    root, gun, update, shoot, setColor, setTrigger, setWeapon, setHolstered, setWeaponModels, resetInput, clearEffects, palette: PAINTBALL_PALETTE, weapons: PAINTBALL_WEAPONS, dispose,
     pickupWeapon(id) { const result = inventory.pickup(id); setWeapon(id); return result; },
     get inventory() { return inventory.state; },
     get availableWeapons() { return inventory.available; },
     get weaponModels() { return weaponModels; },
-    setAiming(value) { aiming = !disposed && !!getActive() && PAINTBALL_WEAPONS[weaponIndex].kind === 'firearm' && !!value; if (!getActive()) restoreView(); },
-    resetInput() { trigger = false; pendingAttack = pendingShot = null; restoreView(); },
+    setAiming(value) { aiming = !disposed && !holstered && !!getActive() && PAINTBALL_WEAPONS[weaponIndex].kind === 'firearm' && !!value; if (!getActive()) restoreView(); },
     async warmup(renderer) {
       // Compile pooled effect shaders before the first shot, then restore visibility.
       const visible = gun.visible;
@@ -399,6 +407,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
     get colorIndex() { return colorIndex; },
     get weapon() { return PAINTBALL_WEAPONS[weaponIndex]; },
     get weaponIndex() { return weaponIndex; },
+    get holstered() { return holstered; },
     get aiming() { return aiming; },
     get scoped() { return scoped(); },
     get scopeZoom() { return scopeZoom; },

@@ -31,6 +31,8 @@ Abra **`/debug`** no site para entrar diretamente no treino com o painel **Ajust
 
 O personagem **Sato**, carregado de `public/models/sato.glb`, começa com Glock-18, M4A4 e faca. São **2 slots de fogo + 1 melee**, com socos sempre disponíveis. O catálogo inclui revólver R8, Nova, AWP, MP5-SD, três facas, machado e bastão com arame. As referências de dano, cadência e funcionamento estão em [docs/weapons.md](docs/weapons.md). Todas as armas mantêm detalhes na cor escolhida; melee e socos não pintam o chão. `X`, o ícone discreto à esquerda ou o scroll alternam primeira/terceira pessoa. As vistas compartilham o mesmo Sato e suas animações de tiro, espada e sequência de socos.
 
+`Z` guarda a arma ou a guarda de socos, deixando o personagem no idle normal; pressione novamente para equipar a mesma seleção. `C` alterna agachado/em pé, parado ou andando, com câmera mais baixa e velocidade reduzida. No celular, as duas ações têm botões ao lado da tinta. Durante o voo da campanha, Sato nada comicamente no ar usando a animação original completa.
+
 No celular, jogue em pé ou deitado: a intensidade do analógico controla caminhada, trote e corrida em qualquer direção. Segure e arraste o botão de ataque para mirar enquanto ataca. Segure o botão da arma ou `Q` para abrir a roda, indique a opção com dedo, mouse ou analógico e solte para equipar. Perto de uma arma, use o botão de pegar ou `E`: o slot de fogo selecionado (ou o último usado) é substituído; melee troca só o slot 3. A arma anterior fica no chão. Há botões de câmera, pulo, voo, mapa, menu e orientação.
 
 A música original dos menus e os efeitos de navegação/paintball usam Web Audio e começam no primeiro toque ou tecla. Música e efeitos têm controles independentes nas configurações, salvos no aparelho e aplicados sem recarregar. O áudio pausa quando a aba fica em segundo plano. Os SVGs locais são do Lucide e Game Icons; veja [créditos e licenças](public/icons/README.md). A fonte do logo é Bowlby One (SIL OFL).
@@ -41,6 +43,9 @@ A música original dos menus e os efeitos de navegação/paintball usam Web Audi
 | Mouse | olhar (se o navegador bloquear o pointer lock: segurar e arrastar) |
 | `Shift` | correr |
 | `Espaço` | pular |
+| `Z` | desarmar / equipar novamente |
+| `C` | agachar / levantar, inclusive andando |
+| `V` | trocar cor da tinta |
 | `F` | voo livre (`E`/`Control` sobe/desce) |
 | Segurar `Q` | abrir roda; apontar e soltar para equipar |
 | `E` | pegar arma próxima e soltar a anterior do slot |
@@ -114,7 +119,7 @@ fachadas específicas dos prédios coloridos, escadas e rampas, portarias detalh
 Inclui passarela Vermelho–Rubi com entradas opostas, praça do Azul com duas escadarias em torno do chafariz,
 abrigos MOVE, catracas de entrada/saída, locomotiva junto ao CTI e bases niveladas para os prédios em encostas.
 Ruas internas têm seção plana, duas mãos e faixa central. Pistola e metralhadora nas duas vistas atiram tinta:
-clique para disparar (segure com a metralhadora), `C` para trocar a cor, ou escolha a cor no menu/HUD.
+clique para disparar (segure com a metralhadora), `V` para trocar a cor, ou escolha a cor no menu/HUD.
 Vegetação, grama e água usam materiais com vento e ondulações inspirados em `sato-agents-lab` / Bruno Simon.
 Veja [as referências, limites e verificação](docs/campus-reference.md) e [a atribuição dos materiais](docs/nature-reference.md).
 Execute `npm test` para verificar a geometria e a navegação.

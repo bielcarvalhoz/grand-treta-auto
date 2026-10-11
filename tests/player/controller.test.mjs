@@ -90,3 +90,36 @@ test('weapon wheel keeps joystick selection alive while suppressing movement and
     assert.ok(player.feet.x > .4); assert.notEqual(player.yaw, yaw);
   } finally { restore(); }
 });
+
+test('crouch lowers the eyes without moving the feet and caps analog or Shift movement at a crouch walk', () => {
+  const { player, camera, send, restore } = controllerFixture();
+  try {
+    player.setCameraMode('first'); let changes = 0;
+    player.events.addEventListener('crouch', () => changes++);
+    assert.equal(player.toggleCrouch(), true); assert.equal(changes, 1);
+    assert.equal(player.feet.y, 0); assert.equal(player.eyePosition.y, 1.1); assert.equal(camera.position.y, 1.1);
+    player.update(.05); assert.equal(player.locomotion.gait, 'crouchIdle');
+    send('pointerdown', 1, 60, 600); send('pointermove', 1, 60, 548);
+    const shift = new Event('keydown'); Object.assign(shift, { code: 'ShiftLeft' }); window.dispatchEvent(shift);
+    player.update(.05); assert.ok(Math.abs(player.velocity.z + 1.6) < 1e-8); assert.equal(player.locomotion.gait, 'crouch');
+    player.setFocusedAim(true); player.update(.05); assert.ok(Math.abs(player.velocity.z + 1.6) < 1e-8);
+    assert.equal(player.toggleCrouch(), false); assert.equal(changes, 2); assert.equal(player.eyePosition.y, 1.7);
+    player.setCrouched(true); player.placeAt(3, 4); assert.equal(player.crouched, false);
+  } finally { restore(); }
+});
+
+test('both flight controls leave crouch and block crouching until flight ends', () => {
+  const { player, restore } = controllerFixture();
+  try {
+    const flying = []; player.events.addEventListener('fly', event => flying.push(event.detail.flying));
+    player.setCrouched(true); player.toggleAutoFly();
+    assert.equal(player.fly, true); assert.equal(player.crouched, false); assert.equal(player.toggleCrouch(), false);
+    player.toggleAutoFly(); assert.equal(player.toggleCrouch(), true);
+    const key = new Event('keydown'); Object.assign(key, { code: 'KeyF' }); window.dispatchEvent(key);
+    assert.equal(player.fly, true); assert.equal(player.crouched, false);
+    window.dispatchEvent(key); assert.equal(player.fly, false);
+    assert.deepEqual(flying, [true, false, true, false]);
+    player.setWeaponWheelOpen(true); assert.equal(player.toggleCrouch(), false);
+    player.setWeaponWheelOpen(false); player.stop(); assert.equal(player.toggleCrouch(), false);
+  } finally { restore(); }
+});

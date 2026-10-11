@@ -89,13 +89,18 @@ export function createWeaponWheel(game) {
     syncWeaponButton();
   }
   function syncWeaponButton() {
-    const next = paint.weapon.id;
+    const next = `${paint.weapon.id}:${!!paint.holstered}`;
     if (signature === next) return;
     signature = next;
-    $('weapon-icon').setAttribute('href', `./icons/controls.svg#${paint.weapon.icon || paint.weapon.id}`);
-    $('weapon-label').textContent = paint.weapon.label.toUpperCase();
-    $('weapon-mode').textContent = 'SEGURE Q · ESCOLHA · SOLTE';
-    button.setAttribute('aria-label', `Arma: ${paint.weapon.label}. Segure para abrir a roda: 2 armas de fogo, 1 melee e socos`);
+    $('weapon-icon').setAttribute('href', `./icons/controls.svg#${paint.holstered ? 'holster' : paint.weapon.icon || paint.weapon.id}`);
+    $('weapon-label').textContent = paint.holstered ? 'DESARMADO' : paint.weapon.label.toUpperCase();
+    $('weapon-mode').textContent = paint.holstered ? 'Z · EQUIPAR NOVAMENTE' : 'SEGURE Q · ESCOLHA · SOLTE';
+    button.setAttribute('aria-label', `${paint.holstered ? 'Desarmado' : `Arma: ${paint.weapon.label}`}. Segure para abrir a roda: 2 armas de fogo, 1 melee e socos`);
+    $('btn-holster').setAttribute('aria-pressed', String(!!paint.holstered));
+    $('btn-holster').setAttribute('aria-label', paint.holstered ? `Equipar novamente: ${paint.weapon.label}` : 'Desarmar');
+    $('btn-holster').title = 'Z · Desarmar / equipar novamente';
+    $('btn-fire').disabled = $('btn-aim').disabled = !!paint.holstered;
+    document.body.classList.toggle('holstered', !!paint.holstered);
     $('btn-fire').setAttribute('aria-label', paint.weapon.kind === 'firearm' ? 'Segurar para atirar; arrastar para mirar' : 'Segurar para atacar; arrastar para mirar');
     player.setFocusedAim(paint.aiming);
     document.body.classList.toggle('aiming', !!paint.aiming);

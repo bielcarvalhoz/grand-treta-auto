@@ -462,3 +462,76 @@ test('debug socket transforms stay independent of camera framing and do not accu
   player.cameraMode = 'first'; avatar.update(0); avatar.updateWeapon(gun); const armEdited = gun.position.clone();
   avatar.updateWeapon(gun); assert.ok(gun.position.distanceTo(armEdited) < 1e-5);
 });
+
+test('holstering uses the full normal idle with lowered hands and restores the previous guard', async () => {
+  for (const [weapon, kind] of [['pistol', 'firearm'], ['knife', 'melee'], ['fists', 'unarmed']]) {
+    const { avatar, player, camera, gun } = await fixture();
+    const state = { weapon, kind }; avatar.setWeapon({ id: weapon, kind }); avatar.update(0); avatar.updateWeapon(gun, state);
+    const ready = avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3());
+    avatar.updateWeapon(gun, { ...state, holstered: true });
+    for (let i = 0; i < 8; i++) { avatar.update(.05); avatar.updateWeapon(gun, { ...state, holstered: true }); }
+    assert.equal(avatar.animationState.motion, 'Idle_Loop'); assert.equal(avatar.animationState.kind, 'relaxed');
+    const hand = avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3());
+    const shoulder = avatar.bones['DEF-upper_armR'].getWorldPosition(new THREE.Vector3());
+    assert.ok(shoulder.y - hand.y > .4, `${weapon}: relaxed idle must lower the arms`);
+    player.cameraMode = 'first'; camera.position.copy(player.eyePosition); camera.updateMatrixWorld(true);
+    avatar.update(0); avatar.updateWeapon(gun, { ...state, holstered: true });
+    assert.equal(avatar.meshes.filter(mesh => mesh.visible).length, 0, 'relaxed first person must leave the view clear');
+    player.cameraMode = 'third'; avatar.updateWeapon(gun, state); avatar.update(0); avatar.updateWeapon(gun, state);
+    assert.equal(avatar.animationState.kind, kind);
+    assert.ok(ready.distanceTo(avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3())) < .03, `${weapon}: previous guard did not return`);
+  }
+});
+
+test('crouch selects authored idle/walking clips, lowers the body and keeps first-person fists and weapons framed', async () => {
+  const { avatar, player, camera, gun } = await fixture();
+  avatar.setWeapon({ id: 'fists', kind: 'unarmed' }); avatar.update(0);
+  const standing = avatar.bones['DEF-head'].getWorldPosition(new THREE.Vector3()).y;
+  player.crouched = true; player.eyePosition.y = 1.1;
+  for (let i = 0; i < 8; i++) avatar.update(.05);
+  assert.equal(avatar.animationState.motion, 'Crouch_Idle_Loop');
+  assert.ok(avatar.bones['DEF-head'].getWorldPosition(new THREE.Vector3()).y < standing - .25);
+  player.velocity.set(0, 0, -1.6);
+  for (let i = 0; i < 8; i++) avatar.update(.05);
+  assert.equal(avatar.animationState.motion, 'Crouch_Fwd_Loop');
+  player.cameraMode = 'first'; camera.position.copy(player.eyePosition); camera.aspect = 390 / 844;
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+  for (const [weapon, kind] of [['fists', 'unarmed'], ['knife', 'melee'], ['pistol', 'firearm']]) {
+    player.crouched = false; player.eyePosition.y = 1.7; camera.position.copy(player.eyePosition); camera.updateMatrixWorld(true);
+    avatar.setWeapon({ id: weapon, kind });
+    for (let i = 0; i < 8; i++) { avatar.update(.03); avatar.updateWeapon(gun, { weapon, kind }); }
+    const standingGuard = Object.fromEntries(['R', 'L'].map(side => [side, camera.worldToLocal(avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3()))]));
+    player.crouched = true; player.eyePosition.y = 1.1; camera.position.copy(player.eyePosition); camera.updateMatrixWorld(true);
+    for (let i = 0; i < 16; i++) {
+      avatar.update(.03); avatar.updateWeapon(gun, { weapon, kind });
+      for (const side of ['R', 'L']) {
+        const hand = avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3()).project(camera);
+        if (kind === 'unarmed') assert.ok(Math.abs(hand.x) < 1 && Math.abs(hand.y) < 1 && hand.z > -1 && hand.z < 1, `${side}: crouch moves the fists offscreen`);
+        const localHand = camera.worldToLocal(avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3()));
+        assert.ok(localHand.distanceTo(standingGuard[side]) < .04, `${weapon}/${side}: crouch changes the camera-relative guard`);
+        const shoulder = camera.worldToLocal(avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3()));
+        const projection = shoulder.clone().applyMatrix4(camera.projectionMatrix);
+        assert.ok(shoulder.z > -camera.near || Math.abs(projection.x) > 1 || Math.abs(projection.y) > 1, `${weapon}: crouch exposes the arm start`);
+      }
+      assert.ok(avatar.weaponDiagnostics.gripError < .003);
+    }
+  }
+});
+
+test('flight plays the complete authored swimming animation for every equipment state and returns to the ground pose', async () => {
+  const reference = await fixture(); reference.avatar.setPreviewAnimation('Swim_Fwd_Loop', .48);
+  const names = ['DEF-hips', 'DEF-spine001', 'DEF-head', 'DEF-upper_armL', 'DEF-forearmR', 'DEF-handR', 'DEF-thighR', 'DEF-footL'];
+  for (const mode of ['third', 'first']) for (const [weapon, kind, holstered] of [['pistol', 'firearm', false], ['fists', 'unarmed', false], ['knife', 'melee', true]]) {
+    const { avatar, player, camera, gun } = await fixture(); const state = { weapon, kind, holstered };
+    player.cameraMode = mode; camera.position.copy(player.eyePosition); camera.updateMatrixWorld(true);
+    avatar.updateWeapon(gun, state);
+    player.fly = true; player.grounded = false; player.velocity.set(0, 0, -16);
+    for (let i = 0; i < 8; i++) { avatar.update(.05); avatar.updateWeapon(gun, state); }
+    assert.equal(avatar.animationState.motion, 'Swim_Fwd_Loop');
+    for (const name of names) assert.ok(avatar.bones[name].quaternion.angleTo(reference.avatar.bones[name].quaternion) < 1e-4,
+      `${mode}/${weapon}/${name}: aim/boxing/hip correction must not overwrite swimming`);
+    player.fly = false; player.grounded = true; player.velocity.set(0, 0, 0);
+    avatar.update(.05); avatar.updateWeapon(gun, state);
+    assert.equal(avatar.animationState.motion, 'Idle_Loop'); assert.equal(avatar.animationState.kind, holstered ? 'relaxed' : kind);
+  }
+});

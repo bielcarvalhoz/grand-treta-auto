@@ -16,9 +16,9 @@ test('right/left mouse button chords aim and fire independently, ignoring touch 
   };
   const canvas=new EventTarget();
   globalThis.document=Object.assign(new EventTarget(),{getElementById:element,createElement:()=>({}),body:element('body'),pointerLockElement:canvas});
-  let focused=false,system;
+  let focused=false,system;const bindings=new Map();
   const player={active:true,touchMode:false,events:new EventTarget(),bindFireButton(){},setFocusedAim:value=>focused=value};
-  const game={engine:{scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(70),renderer:{domElement:canvas},addSystem:fn=>system=fn},player,debug:{},events:createEvents(),input:{bind(){}},toast(){}};
+  const game={engine:{scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(70),renderer:{domElement:canvas},addSystem:fn=>system=fn},player,debug:{},events:createEvents(),input:{bind:(code,handler)=>bindings.set(code,handler)},toast(){}};
   try {
     const paint=createPaintballModule(game);paint.setWeapon('automatic');
     const send=(target,type,button)=>{const event=new Event(type,{cancelable:true});Object.assign(event,{button,clientX:100,clientY:100});target.dispatchEvent(event);};
@@ -35,6 +35,14 @@ test('right/left mouse button chords aim and fire independently, ignoring touch 
     system(.1);assert.equal(paint.stats.shots,wheelShots,'release after closing the wheel never fires');
     document.pointerLockElement=null;send(canvas,'mousedown',0);assert.equal(paint.firing,true,'automatic hold also works without pointer lock');
     send(window,'mouseup',0);assert.equal(paint.firing,false);
+    bindings.get('KeyZ')();assert.equal(paint.holstered,true);assert.equal(paint.weapon.id,'automatic');
+    send(canvas,'mousedown',0);bindings.get('KeyZ')();system(.1);
+    assert.equal(paint.holstered,false);assert.equal(paint.firing,false,'equipping never resumes a stale pointer hold');
+    game.ui.mapOpen=true;bindings.get('KeyZ')();assert.equal(paint.holstered,false,'map blocks the holster shortcut');game.ui.mapOpen=false;
+    const color=paint.colorIndex;bindings.get('KeyV')();assert.notEqual(paint.colorIndex,color);
+    assert.equal(bindings.has('KeyC'),false,'paint leaves C available for crouching');
+    send(element('btn-holster'),'click',0);assert.equal(paint.holstered,true);
+    send(element('btn-holster'),'click',0);assert.equal(paint.holstered,false);
     const shots=paint.stats.shots;player.touchMode=true;
     send(canvas,'mousedown',2);send(canvas,'mousedown',0);system(.1);
     assert.equal(paint.stats.shots,shots);assert.equal(paint.aiming,false);
