@@ -3,7 +3,7 @@ import { mulberry32 } from '../shared/rng.js';
 import { exteriorEdges } from './reference.js';
 import { createKit, toWorld } from './landmark-kit.js';
 import { planStairway, resolveStairway, stairwaySamples, buildStairway } from './stairway.js';
-import { planPortaria, buildPortaria } from './portaria.js';
+import { planPortaria, fitPortariaRoads, buildPortaria } from './portaria.js';
 import { planLocomotive, settleLocomotive, buildLocomotive } from './locomotive.js';
 import { WALK, prepareAlley, nearestStreet, terraceSamples, planAlleyStair, alleySamples, backDoorFrame, spanAt, buildPrataAccess } from './prata-access.js';
 
@@ -33,7 +33,11 @@ export function prepareLandmarks(C, world) {
   for (const m of marks) if (m.type === 'entrada') { const b = C.buildings.find((q) => q.planId === m.building); if (b) b.referenceAccess = true; }
   // portaria dupla: uma cobertura só para as duas pistas (os cruzamentos de muro não ganham marquise própria)
   const gate = marks.find((m) => m.type === 'portaria');
-  if (gate) { C.portaria = planPortaria(gate, (x, z) => pointInPolygon(x, z, C.quarter)); for (const g of C.gates || []) if (g.num === gate.gate && g.type === 'portaria') g.combined = true; }
+  if (gate) {
+    C.portaria = planPortaria(gate, (x, z) => pointInPolygon(x, z, C.quarter));
+    if (world) fitPortariaRoads(C.portaria, world, C);
+    for (const g of C.gates || []) if (g.num === gate.gate && g.type === 'portaria') g.combined = true;
+  }
   const locomotive = marks.find((m) => m.type === 'locomotiva');
   if (locomotive) C.locomotive = planLocomotive(locomotive);
 }
@@ -153,7 +157,7 @@ export function gradeLandmarks(world, terrain, C) {
     // topo e fim encostam na borda externa da calçada das vias internas
     const snap = (p, reach) => {
       const s = nearestStreet(roads, ...p, reach);
-      if (!s) return { p, y: terrain.heightAt(...p) };
+      if (!s) return { p, y: terrain.heightAt(...p) + (walk?.endLift ?? 0) };   // (endLift: chega numa calçada feita por outro marco)
       const dx = p[0] - s.x, dz = p[1] - s.z, L = Math.hypot(dx, dz) || 1, off = s.road.w / 2 + SIDEWALK + .02;
       return { p: [s.x + dx / L * off, s.z + dz / L * off], y: terrain.roadHeightAt(s.road, s.x, s.z) + WALK, street: s };
     };
@@ -163,7 +167,8 @@ export function gradeLandmarks(world, terrain, C) {
     let plan = planStairway(points, options);
     // Degraus suficientes para o desnível real do barranco: espelho perto de 18 cm e piso entre
     // 25 e 30 cm (o eixo vem da planta; o número de degraus, do relevo).
-    const foot = plan.flights.at(-1).b, drop = top.y - terrain.heightAt(...foot) - .05, run = plan.flights.reduce((sum, f) => sum + f.run, 0);
+    // (o pé da escada não desce abaixo do fim da passarela: ela é plana, como no vídeo)
+    const foot = plan.flights.at(-1).b, drop = top.y - Math.max(terrain.heightAt(...foot), end ? end.y : -Infinity) - .05, run = plan.flights.reduce((sum, f) => sum + f.run, 0);
     const tread = Math.max(.25, Math.min(.3, run / Math.ceil(drop / .18)));
     if (Math.abs(tread - plan.flights[0].tread) > .004) plan = planStairway(points, { ...options, tread });
     const riser = Math.max(.14, Math.min(.2, drop / plan.risers));
@@ -193,10 +198,11 @@ function groveAround(S, C, roads) {
 }
 
 /** Malhas, pisos, colisão e áreas sem árvores/carros dos marcos. */
-export function buildLandmarks(C, { renderer, terrain, world, roads }) {
+/** `rendered(road)`: se a via ganha malha 3D (sem o entorno, as ruas de fora são só pintura no relevo) */
+export function buildLandmarks(C, { renderer, terrain, world, roads, rendered }) {
   const kit = createKit(renderer), solids = [], surfaces = [], exclusions = [], entrances = [], trees = [];
   const ground = (x, z) => terrain.heightAt(x, z), sidewalkAt = roads?.sidewalkHeightAt, surfaceAt = roads?.surfaceHeightAt;
-  const take = (part) => { solids.push(...part.solids); surfaces.push(...part.surfaces); exclusions.push(...part.exclusions); if (part.entrances) entrances.push(...part.entrances); return part; };
+  const take = (part) => { solids.push(...part.solids); surfaces.push(...part.surfaces); exclusions.push(...part.exclusions); if (part.entrances) entrances.push(...part.entrances); if (part.trees) trees.push(...part.trees.map((t) => ({ ...t, fixed: true }))); return part; };
   const plan = { stairways: [], locomotive: C.locomotive || null, alley: C.alley || null };
 
   for (const planned of C.stairways || []) {
@@ -212,7 +218,7 @@ export function buildLandmarks(C, { renderer, terrain, world, roads }) {
   }
   const roadClearance = (x, z) => { const s = nearestStreet(world.roads, x, z, 20); return s ? s.d - s.road.w / 2 : Infinity; };
   if (C.locomotive) plan.locomotive = { ...C.locomotive, ...take(buildLocomotive(kit, C.locomotive, { ground, clearance: roadClearance })) };
-  if (C.portaria) plan.portaria = { ...C.portaria, ...take(buildPortaria(kit, C.portaria, { ground, clearance: roadClearance })) };
+  if (C.portaria) plan.portaria = { ...C.portaria, ...take(buildPortaria(kit, C.portaria, { ground, clearance: roadClearance, surfaceAt, streetMesh: !rendered || !C.portaria.rua || rendered(C.portaria.rua) })) };
   const access = take(buildPrataAccess(kit, C, { ground, roads: world.roads, surfaceAt, sidewalkAt }));
   plan.access = access.notes;
 
@@ -234,7 +240,7 @@ export function buildLandmarks(C, { renderer, terrain, world, roads }) {
   };
   // a mata não invade pisos (o zigue-zague traz um lance para perto do recuo lateral de outro)
   const onFloor = (x, z) => [[0, 0], [1.4, 0], [-1.4, 0], [0, 1.4], [0, -1.4]].some(([dx, dz]) => Number.isFinite(surfaceHeightAt(x + dx, z + dz)));
-  for (let i = trees.length - 1; i >= 0; i--) if (onFloor(trees[i].x, trees[i].z)) trees.splice(i, 1);
+  for (let i = trees.length - 1; i >= 0; i--) if (!trees[i].fixed && onFloor(trees[i].x, trees[i].z)) trees.splice(i, 1);
   const stats = { ...root.userData.stats, stairways: plan.stairways.length, risers: plan.stairways.reduce((sum, S) => sum + S.risers, 0), locomotive: !!C.locomotive, alley: !!C.alley?.stair, surfaces: surfaces.length, solids: solids.length, groveTrees: trees.length };
   root.userData.landmarks = stats;
   return { root, plan, stats, solids, surfaces, exclusions, entrances, trees, surfaceHeightAt };

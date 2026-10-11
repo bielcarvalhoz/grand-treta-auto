@@ -57,7 +57,7 @@ export function createCampusPlugin(game, campusGeo) {
       if (!plugin.data) return;
       await game.status('Construindo o núcleo Cidade de Deus (portarias, muros, prédios)...', 55);
       const { scene, renderer } = game.engine;
-      plugin.built = buildCampus(plugin.data, { scene, renderer, terrain: map.terrain, world: map.world, roads: map.roads, masks: map.masks, quality: game.quality.name });
+      plugin.built = buildCampus(plugin.data, { scene, renderer, terrain: map.terrain, world: map.world, roads: map.roads, rendered: (road) => !map.renderWorld || map.renderWorld.roads.includes(road), masks: map.masks, quality: game.quality.name });
     },
 
     async decorate(map) {

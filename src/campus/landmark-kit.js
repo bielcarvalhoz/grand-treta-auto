@@ -1,4 +1,17 @@
 import * as THREE from 'three';
+import { roadTexture, pavementTexture, ROAD_TILE_M } from '../shared/textures.js';
+
+// Pisos com as MESMAS texturas das vias e calçadas (roads.js), mapeadas em metros do mundo, para um
+// pátio emendar numa rua ou numa calçada sem diferença de tom. `units`: polygonOffset — o pátio
+// vence a via que ele sobrepõe, a calçada vence o pátio e a pintura de solo vence todos.
+const FLOORS = {
+  asphalt: { flat: '#55575a', map: (r) => roadTexture(r, 'service', 0, { plain: true }), tile: [ROAD_TILE_M / 2, ROAD_TILE_M], units: -24 },             // vias internas
+  'asphalt-street': { flat: '#4a4c50', map: (r) => roadTexture(r, 'oneway', 3, { plain: true }), tile: [ROAD_TILE_M / 2, ROAD_TILE_M], units: -24 },   // ruas públicas, sem as marcas
+  'asphalt-ground': { flat: '#4c4e52', map: (r) => roadTexture(r, 'oneway', 3, { plain: true, base: '#4c4e52' }), tile: [ROAD_TILE_M * 8, ROAD_TILE_M * 16], units: -24 },   // rua só pintada no relevo (ground.js): mesmo tom, grão largo
+  pavement: { flat: '#a99d84', map: (r) => pavementTexture(r), tint: 0xe9dfc8, tile: [4, 4], units: -28 },                            // calçadas internas
+  paint: { flat: '#f1eee2', units: -40, factor: -2 },
+  'paint-yellow': { flat: '#e7c347', units: -40, factor: -2 },                                                                                // faixas e setas
+};
 
 // Peças simples para os marcos do campus (escadaria, locomotiva, acessos): tudo vira UMA malha
 // por cor, mais uma por textura de placa. Sem UV nas peças lisas; sombreamento chapado.
@@ -114,6 +127,13 @@ export function createKit(renderer) {
     finish(name) {
       const root = new THREE.Group(); root.name = name;
       // Todas as peças lisas numa malha só (cor por vértice); vidro e marquise têm material próprio.
+      const floor = (key, list) => {
+        const spec = FLOORS[key], textured = spec.map && renderer && typeof document !== 'undefined';
+        const material = new THREE.MeshStandardMaterial({ color: textured ? spec.tint ?? 0xffffff : spec.flat, roughness: .93, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: spec.factor ?? -1, polygonOffsetUnits: spec.units });
+        if (textured) material.map = spec.map(renderer);
+        const m = mesh(`${name}-${key}`, list, material);
+        if (spec.tile) { const uv = new Float32Array(list.length / 3 * 2); for (let i = 0, k = 0; i < list.length; i += 3) { uv[k++] = list[i] / spec.tile[0]; uv[k++] = list[i + 2] / spec.tile[1]; } m.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); }
+      };
       const special = { glass: () => new THREE.MeshStandardMaterial({ color: '#27404a', roughness: .2, metalness: .25 }),
         canopy: () => new THREE.MeshStandardMaterial({ color: '#f1f1ea', roughness: .5, transparent: true, opacity: .78, side: THREE.DoubleSide }) };
       const mesh = (name, positions, material, colors) => {
@@ -127,6 +147,7 @@ export function createKit(renderer) {
       const positions = [], colors = [], tint = new THREE.Color();
       for (const [color, list] of solids) {
         if (!list.length) continue;
+        if (FLOORS[color]) { floor(color, list); continue; }
         if (special[color]) { mesh(`${name}-${color}`, list, special[color]()).castShadow = color !== 'canopy'; continue; }
         tint.set(color);
         for (let i = 0; i < list.length; i += 3) { positions.push(list[i], list[i + 1], list[i + 2]); colors.push(tint.r, tint.g, tint.b); }

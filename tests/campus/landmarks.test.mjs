@@ -132,10 +132,10 @@ test('every landmark floor is above the graded terrain and clear of trees', () =
   }
   assert.ok(built.trees.length >= 30, 'mata em volta da escadaria');
   for (const tree of built.trees) {
-    assert.ok(!built.surfaces.some((surface) => pointInPolygon(tree.x, tree.z, surface.rings)));
+    if (!tree.fixed) assert.ok(!built.surfaces.some((surface) => pointInPolygon(tree.x, tree.z, surface.rings)));   // (fixas: árvore plantada num canteiro próprio)
     assert.ok(Number.isFinite(tree.x + tree.z + tree.s));
   }
-  assert.ok(built.stats.triangles > 5000 && built.stats.meshes <= 16);
+  assert.ok(built.stats.triangles > 5000 && built.stats.meshes <= 18);   // (uma malha por piso texturizado/pintura + placas)
 });
 
 test('alley cut separates a retaining block from the building end and its stair fits the gap', () => {
@@ -249,6 +249,75 @@ test('Portaria Bussocaba is ONE double canopy over both carriageways, inside the
   assert.ok(under.length >= 2, `${under.length} pista(s) sob a cobertura`);
   for (const p of P.ring) assert.ok(pointInPolygon(...p, C.quarter), 'cobertura para fora do campus');
   // nenhum pilar ou guarita no leito das pistas
+  // as duas pistas atravessam a cobertura em ângulo reto, a entrada sob a laje sudoeste
+  assert.equal(P.lanes.length, 2);
+  for (const lane of P.lanes) assert.ok(lane.tx * P.inVec[0] + lane.tz * P.inVec[1] > .98, 'pista enviesada sob a cobertura');
+  const [entry, exit] = [...P.lanes].sort((a, b) => a.s - b.s);
+  assert.ok(!entry.exit && exit.exit && entry.s < P.length / 2 && exit.s > P.length / 2);
+  // a frente é um pátio aberto para a rua: região fora do muro, com a ilha da árvore dentro dela
+  assert.equal(C.wallCutouts.length, 1);
+  assert.ok(pointInPolygon(...P.at(P.ilha[0], P.ilha[1]), [C.wallCutouts[0]]) && pointInPolygon(...P.at(entry.s, -8), [C.wallCutouts[0]]) && pointInPolygon(...P.at(exit.s, -8), [C.wallCutouts[0]]));
+  assert.ok(!pointInPolygon(...P.at(P.length / 2, 3), [C.wallCutouts[0]]), 'o lado de dentro continua murado');
+  assert.ok(C.wallOpenings.length === 2 && C.sealLines.length === 1, 'vãos do muro sob a cobertura e fechamento do perímetro pela portaria');
+  // duas entradas de pedestres: ao lado da recepção (ponta sudoeste) e ao lado da Agência (ponta nordeste)
+  assert.equal(P.pedestrians.length, 2);
+  assert.ok(P.pedestrians[0].s > P.recepcao[1] && P.pedestrians[0].s < entry.span[0] && P.pedestrians[1].s > exit.span[1]);
+  // "rua bem larga": asfalto contínuo da cobertura até a rua interna, sem calçada no meio
+  assert.ok(P.plaza.length > 20 && P.plaza.every(([, v]) => v > P.depth / 2 + 5), 'pátio de dentro até a rua interna');
+  assert.ok(world.sidewalkVoids.some((ring) => pointInPolygon(...P.at(P.length / 2, P.depth / 2 + 6), [ring])), 'sem calçada dentro do pátio');
+  assert.ok(exit.gateWidth > 12 && entry.gateWidth < 6, 'saída com duas faixas, entrada com uma');
+  // a ilha e a guarita não invadem as pistas
+  for (const lane of P.lanes) { assert.ok(Math.abs(lane.s - P.ilha[0]) > 0); const [ix, iz] = P.at(P.ilha[0], P.ilha[1]), street = nearestStreet([lane.road], ix, iz, 40); assert.ok(street.d - lane.width / 2 > P.ilha[2] + .3, 'ilha da árvore sobre a pista'); }
   for (const s of built.solids.filter((q) => /portaria|guarita/.test(q.kind))) for (const p of s.rings[0]) { const street = nearestStreet(world.roads, ...p, 20); assert.ok(!street || street.d - street.road.w / 2 > .2, `${s.kind} no leito da via`); }
   assert.ok(built.solids.filter((q) => q.kind === 'pilar-portaria').length >= 3);
+});
+
+test('Portaria Bussocaba: one level, straight wall, crossings from kerb to kerb and no sidewalk ending in nothing', () => {
+  const L = actualLandmarks(), { C, world, terrain, built } = L, P = built.plan.portaria, D = P.depth;
+  const at = (table, s) => { if (s <= table[0][0]) return table[0][1]; for (let i = 1; i < table.length; i++) if (s <= table[i][0]) return table[i - 1][1] + (table[i][1] - table[i - 1][1]) * (s - table[i - 1][0]) / (table[i][0] - table[i - 1][0]); return table.at(-1)[1]; };
+  const kerb = (s) => at(P.frente, s), [entry, exit] = [...P.lanes].sort((a, b) => a.s - b.s);
+  const inner = world.roads.find((r) => !r.hidden && r.pts.some((p) => Math.hypot(p[0] - entry.road.pts.at(-1)[0], p[1] - entry.road.pts.at(-1)[1]) < .5 || Math.hypot(p[0] - entry.road.pts[0][0], p[1] - entry.road.pts[0][1]) < .5) && r.internal);
+  const off = (road, s, v) => nearestStreet([road], ...P.at(s, v), 60).d;
+  // terraço num nível só: cobertura, pátio, passagens, calçada rente à Agência, laje e a própria Agência
+  const level = terrain.heightAt(P.frame.x, P.frame.z);
+  for (const [s, v] of [[10, 12], [25, 15], [20, 22], [34.5, 0], [36.8, 3], [34.5, 20], [36.8, 21], [-3, 8], [28, 30], [33, 33]]) assert.ok(Math.abs(terrain.heightAt(...P.at(s, v)) - level) < .04, `desnível de ${(terrain.heightAt(...P.at(s, v)) - level).toFixed(2)} m em (${s}, ${v})`);
+  assert.ok(Math.abs(terrain.platformFor(C.buildings.find((b) => b.planId === 'b34')).height - level) < .04, 'Agência no mesmo terraço');
+  for (const [s, v] of [[20, 23.8], [26, 31.5], [31, 37.5]]) assert.ok(Math.abs(terrain.roadHeightAt(inner, ...P.at(s, v)) - level) < .04, 'rua interna no nível do pátio');
+  // muro reto: o pátio da frente é um retângulo fora do muro; a cortina do limite do bairro não cruza as bocas
+  assert.equal(C.wallCutouts[0].length, 4);
+  assert.deepEqual(world.boundaryOpenings, C.wallCutouts);
+  for (const lane of P.lanes) assert.ok(pointInPolygon(...P.at(lane.s, kerb(lane.s) + 1), [world.boundaryOpenings[0]]));
+  // asfalto: o pátio da frente entra no leito da rua (para as faixas) e o de dentro no leito da rua interna
+  for (const [s, v] of P.frenteRua) assert.ok(kerb(s) - v > 1.5 && kerb(s) - v < 4.5);
+  for (const [s, v] of P.plaza) { const d = off(inner, s, v); assert.ok(d < inner.w / 2 && d > inner.w / 2 - .6, `borda do pátio a ${d.toFixed(2)} m do eixo da rua interna`); }
+  // sem calçada dentro do pátio: os vãos são convexos (recorte exato em roads.js) e vão da cobertura ao leito
+  for (const ring of world.sidewalkVoids) {
+    assert.equal(ring.length, 4);
+    const turns = ring.map((p, i) => { const a = ring[(i + 1) % 4], b = ring[(i + 2) % 4]; return (a[0] - p[0]) * (b[1] - a[1]) - (a[1] - p[1]) * (b[0] - a[0]); });
+    assert.ok(turns.every((t) => t > 0) || turns.every((t) => t < 0), 'vão não convexo');
+  }
+  // faixas de pedestres das bocas: do leque até a ilha da árvore e da ilha até a calçada rente à Agência
+  const [first, second] = P.faixasBoca, island = P.ilhaContorno, fan = P.leque.fora[P.leque.guia - 1];
+  assert.ok(Math.abs(first[0] - fan[0]) < 1 && Math.abs(first[1] - island[0][0]) < 1 && Math.abs(second[0] - island.at(-1)[0]) < 1 && Math.abs(second[1] - P.calcadaRua.esquerda.at(-1)[0]) < 1);
+  for (const p of [island[0], island.at(-1), fan, P.calcadaRua.esquerda.at(-1), P.calcadaRua.direita.at(-1), P.leque.fora.at(-1)]) assert.ok(Math.abs(p[1] - kerb(p[0])) < .1, 'ponta fora do meio-fio da rua');
+  // ilhas fora das pistas (a da árvore e o nariz da ilha da guarita)
+  for (const lane of P.lanes) for (const [s, v] of [...island, ...P.nariz.baixo, ...P.nariz.alto, P.nariz.ponta]) assert.ok(off(lane.road, s, v) - lane.width / 2 > .15, `ilha sobre a pista em (${s}, ${v.toFixed(1)})`);
+  // a calçada rente à Agência termina na calçada da rua interna; a faixa de dentro chega ao meio-fio do outro lado
+  for (const side of [P.calcadaAgencia.esquerda, P.calcadaAgencia.direita]) { const d = off(inner, ...side.at(-1)); assert.ok(d > inner.w / 2 + .2 && d < inner.w / 2 + 2.5, `fim da calçada a ${d.toFixed(2)} m do eixo`); }
+  assert.ok(Math.abs(off(inner, ...P.chegada) - inner.w / 2) < .5 && P.chegada[0] < P.faixaInterna[2] - 6, 'faixa de pedestres até o outro meio-fio');
+  assert.equal(inner.sidewalkCrossings.length, 2);
+  // percursos a pé pelos pisos (sem a malha das calçadas das vias neste teste): nenhum degrau alto
+  const fanWalk = walk(L, [P.at(-2.6, kerb(-2.6) + 1.2), P.at(1, -11), P.at(6.9, -7.5), P.at(6.65, 0), P.at(6.65, 5), P.at(3.4, 7.5), P.at(-2.5, 9)]);
+  const agencyWalk = walk(L, [P.at(36.5, kerb(36.5) + 1.5), P.at(35.8, -20), P.at(34.5, -6), P.at(34.5, 6), P.at(34.5, 26)]);
+  assert.ok(fanWalk.jump <= .45 && agencyWalk.jump <= .45, `degraus de ${fanWalk.jump.toFixed(2)} e ${agencyWalk.jump.toFixed(2)} m`);
+  assert.ok(Math.abs(agencyWalk.end - (level + .41)) < .03 && Math.abs(fanWalk.end - (level + .41)) < .05, 'calçadas no nível das calçadas das vias internas');
+  // a passarela da escadaria chega no nível da calçada rente à Agência, sem degrau
+  const S = built.plan.stairways[0], tail = S.path.at(-1);
+  assert.ok(Math.abs(S.endY - built.surfaceHeightAt(...P.at(36.6, P.local(...tail)[1]))) < .05, 'passarela em degrau com a calçada');
+  assert.ok(S.bottomY >= S.endY - .01, 'pé da escada abaixo do fim da passarela');
+  // lixeiras da passarela sobre laje própria
+  const bins = built.solids.find((q) => q.kind === 'lixeiras');
+  assert.ok(bins, 'sem as lixeiras');
+  const cx = bins.rings[0].reduce((sum, p) => sum + p[0], 0) / 4, cz = bins.rings[0].reduce((sum, p) => sum + p[1], 0) / 4, floor = built.surfaceHeightAt(cx, cz);
+  assert.ok(Number.isFinite(floor) && bins.top - floor > 1 && bins.top - floor < 1.3, 'lixeiras sem piso por baixo');
 });

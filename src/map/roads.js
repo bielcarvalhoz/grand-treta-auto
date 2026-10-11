@@ -105,6 +105,8 @@ export function buildRoads(world, terrain, renderer) {
       streetIndex.insertBox({ r, ax, az, bx, bz }, Math.min(ax, bx) - r.w, Math.min(az, bz) - r.w, Math.max(ax, bx) + r.w, Math.max(az, bz) + r.w);
     }
     if (r.kind === 'foot' && !r.bridge) continue;
+    // r.hidden: via que cruza um pátio asfaltado feito por outro módulo (sem malha nem pintura próprias)
+    if (r.hidden) continue;
 
     const pts = resample(r.pts, 2.5);
     const n = pts.length;
@@ -292,13 +294,16 @@ function buildCampusSidewalks(world, terrain, renderer, roadLifts) {
     const xs = polygon.map((p) => p[0]), zs = polygon.map((p) => p[1]);
     return { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
   };
+  // world.sidewalkVoids: polígonos CONVEXOS de pátios asfaltados onde a via não tem calçada nem guia;
+  // a calçada é recortada exatamente na borda deles (quem fez o pátio arremata a ponta)
+  const voids = (world.sidewalkVoids || []).map((polygon) => ({ polygon, bb: bounds(polygon) }));
   for (const r of roads) {
     const frames = roadFrames(resampleRoad(r.pts, 1.2));
     layout.set(r, frames);
     for (let i = 1; i < frames.length; i++) {
       const polygon = stripQuad(frames[i - 1], frames[i], -r.w / 2, r.w / 2);
       const bb = bounds(polygon);
-      footprints.insertBox({ r, polygon, bb }, bb.x0, bb.z0, bb.x1, bb.z1);
+      if (!r.hidden) footprints.insertBox({ r, polygon, bb }, bb.x0, bb.z0, bb.x1, bb.z1);   // vias sem malha não recortam calçadas
     }
   }
   const signedArea = (p) => p.reduce((s, a, i) => { const b = p[(i + 1) % p.length]; return s + a[0] * b[1] - b[0] * a[1]; }, 0) / 2;
@@ -316,6 +321,10 @@ function buildCampusSidewalks(world, terrain, renderer, roadLifts) {
       if (obstacle.r === r || !intersects(obstacle.bb)) continue;
       pieces = pieces.flatMap((p) => subtractConvex(p, obstacle.polygon));
       if (!pieces.length) break;
+    }
+    if (overlap) for (const hole of voids) {
+      if (!pieces.length) break;
+      if (intersects(hole.bb)) pieces = pieces.flatMap((p) => subtractConvex(p, hole.polygon));
     }
     return pieces;
   };
@@ -352,7 +361,7 @@ function buildCampusSidewalks(world, terrain, renderer, roadLifts) {
   }
   for (const r of roads.filter((r) => r.internal)) {
     const frames = layout.get(r);
-    if (frames.length < 2) continue;
+    if (frames.length < 2 || r.hidden) continue;
     stats.roads++;
     const width = r.tags?.service === 'parking_aisle' ? 1.4 : 2.5, hw = r.w / 2;
     const lift = roadLifts.get(r), crossings = r.sidewalkCrossings || [];
@@ -368,6 +377,8 @@ function buildCampusSidewalks(world, terrain, renderer, roadLifts) {
       return roadGround(r, x, z) + lift + 0.025 + 0.145 * ramp;
     };
     for (let i = 1; i < frames.length; i++) for (const side of [-1, 1]) {
+      // r.sidewalkSide (+1 direita, -1 esquerda no sentido dos pontos; 2 = nenhum): calçada de um lado só
+      if (r.sidewalkSide && side !== r.sidewalkSide) continue;
       const a = frames[i - 1], b = frames[i];
       const sidewalk = stripQuad(a, b, side * (hw + 0.2), side * (hw + width));
       for (const p of clipToRoads(sidewalk, r, true)) {
