@@ -17,6 +17,7 @@ import { addMapPlaces } from './places.js';
 // O mapa é montado por um pipeline em etapas. Módulos que mudam o mundo (ex.: o campus)
 // entram como PLUGINS, implementando os ganchos que quiserem — na ordem em que rodam:
 //   prepareWorld(map)       depois de ler o GeoJSON (pode mexer em map.world, chamar map.reserve)
+//   correctTerrain(map)     antes de escavar a água: corrigir o relevo de satélite (pontos de controle)
 //   shapeTerrain(map)       depois de escavar a água, antes de gerar a malha do relevo
 //   detailGroundRect(map)   -> { x0, z0, width, depth } para pintar o chão em alta resolução
 //   build(map)              depois das vias e dos prédios do OSM
@@ -76,6 +77,7 @@ export async function buildMap(game, { data, plugins = [] }) {
   };
 
   await hook('prepareWorld');
+  await hook('correctTerrain');
   for (const a of world.areas) if (a.kind === 'water') a.waterLevel = terrain.carveWater(a.rings);
   await hook('shapeTerrain');
   const renderWorld = renderWorldFor(world, game.settings?.surroundings);

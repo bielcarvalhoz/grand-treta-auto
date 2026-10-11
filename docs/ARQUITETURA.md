@@ -68,6 +68,7 @@ O mapa é construído por um pipeline. Quem precisa alterar o mundo (como o camp
 | Gancho | Quando roda | Uso no campus |
 |---|---|---|
 | `prepareWorld(map)` | logo após ler o GeoJSON | troca os prédios do OSM pela planta oficial; `map.reserve(área)` |
+| `correctTerrain(map)` | antes de escavar a água | corrige o relevo de satélite com os pontos de controle altimétrico |
 | `shapeTerrain(map)` | após escavar a água, antes da malha do relevo | terraplenagem (pista, prédios, acessos) |
 | `detailGroundRect(map)` | ao pintar o chão | chão em alta resolução sobre o campus |
 | `build(map)` | após vias e prédios do OSM | constrói prédios, muros, portarias, carros |

@@ -19,6 +19,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'public', 'data', 'campus-cidade-de-deus.geojson');
 const plan = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/campus/planta-oficial.json'), 'utf8'));
 const arvores = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/campus/arvores-satelite.json'), 'utf8')).arvores;
+const convivencia = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/campus/convivencia.json'), 'utf8'));
+const controle = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/campus/controle-altimetrico.json'), 'utf8'));
 
 const RED = '#c8102e';
 const M_LAT = 110574;
@@ -116,7 +118,9 @@ point({ kind: 'silo', source: SRC_SAT, height: 9, radius: 1.6 }, [-23.5482859, -
 point({ kind: 'playground', source: SRC_SAT }, [-23.5480252, -46.7704779]);
 
 // ---------------------------------------------------------------- áreas
-poly({ kind: 'lake', source: SRC_PLAN, name: 'Lago' }, plan.lago);
+// Área de convivência (lago, campo, pista, quadras, piscinas, arquibancada, quiosques...): formas
+// levantadas em scripts/campus/convivencia.json; o jogo troca as do OSM/planta por elas.
+point({ kind: 'leisure', source: convivencia.fonte, layout: convivencia }, convivencia.pista.centro);
 // gramados da planta (exceto campo e quadras, tratados à parte)
 const PITCH = [-46.771789, -23.547988];
 const centroid = (r) => { let x = 0, y = 0; for (const [a, b] of r.slice(0, -1)) { x += a; y += b; } return [x / (r.length - 1), y / (r.length - 1)]; };
@@ -126,8 +130,7 @@ for (const g of plan.gramados) {
   const d = distM(c, PITCH);
   if (d < 70) {
     // dentro da pista: as 3 quadras do "D" sul (as do norte vêm do OSM)
-    if (d > 35) poly({ kind: 'court', source: SRC_PLAN }, g);
-    continue;
+    continue; // campo e quadras vêm do levantamento da convivência
   }
   poly({ kind: 'lawn', source: SRC_PLAN }, g);
 }
@@ -157,15 +160,18 @@ point({ kind: 'gate', type: 'portaria', name: 'Portaria Vila Yara', num: 9 }, [-
 // e na imagem aérea. Nenhuma imagem entra no jogo — só posições e atributos.
 const SRC_FIELD = 'vídeos/fotos do usuário (10/2026) + planta oficial';
 // Escadaria da mata: da Rua Três (anel do Prédio Azul) até o lado da Agência / Portaria 10.
-// Eixo traçado sobre a planta oficial (zigue-zague com a praça redonda dos bancos).
+// Eixo traçado sobre a planta oficial (zigue-zague com a praça redonda dos bancos); o primeiro e o
+// último lances foram alongados ~3 m para caber o desnível real (~22 m) com degraus normais.
 line({ kind: 'stairway', id: 'escadaria-mata', name: 'Escadaria da mata', source: SRC_FIELD, width: 3, plaza: 3, plazaRadius: 2.7, sawtoothFrom: 3 }, [
-  [-23.5465196, -46.7713852], [-23.5465829, -46.7714589], [-23.5465569, -46.7715094],
-  [-23.5465629, -46.7716002], [-23.5465874, -46.7716887], [-23.5466399, -46.7717163],
+  [-23.5465196, -46.7713852], [-23.5466001, -46.7714808], [-23.5465569, -46.7715094],
+  [-23.5465629, -46.7716002], [-23.5465874, -46.7716887], [-23.5466627, -46.7717288],
 ]);
 // Passarela de grades verdes do pé da escada até a via da Portaria Bussocaba.
-line({ kind: 'walkway', id: 'passarela-agencia', from: 'escadaria-mata', source: SRC_FIELD, width: 2.2 }, [[-23.5466399, -46.7717163], [-23.54673, -46.771962]]);
+line({ kind: 'walkway', id: 'passarela-agencia', from: 'escadaria-mata', source: SRC_FIELD, width: 2.2 }, [[-23.5466627, -46.7717288], [-23.54673, -46.771962]]);
 // Locomotiva 801 ao lado do CTI: frente (limpa-trilhos) para ESE, trilho de exposição de 26 m.
 point({ kind: 'landmark', type: 'locomotiva', name: 'Locomotiva 801', source: SRC_FIELD, heading: 113 }, [-23.546803, -46.768288]);
+// Portaria Bussocaba: UMA cobertura dupla sobre as duas pistas (vista aérea do usuário), junto à Agência.
+point({ kind: 'landmark', type: 'portaria', gate: 10, name: 'Portaria Bussocaba', heading: 90, width: 27, depth: 10.5, source: SRC_FIELD }, [-23.5466349, -46.7721482]);
 // Beco com escada na ponta leste do Balança (do estacionamento à rua do Prata).
 point({ kind: 'landmark', type: 'beco', building: 'b8', toward: 'b6', end: 'leste', offset: 5.2, width: 2.6, source: SRC_FIELD }, [-23.5479607, -46.7738679]);
 // Entradas do Prata: -2 ao pé da torre da fachada norte; fundos do andar zero na fachada sul.
@@ -174,6 +180,33 @@ point({ kind: 'landmark', type: 'entrada', id: 'prata-terreo', building: 'b6', s
 // A rua entre o Balança e o Prata passa rente ao Balança (o eixo do OSM encosta no Prata e não
 // deixa lugar para a calçada e a entrada do -2): miolo do eixo 5 m para o norte.
 line({ kind: 'roadFix', way: 'way/866315705', source: SRC_FIELD }, [[-23.5482323, -46.7742755], [-23.5479618, -46.773486]]);
+
+// A via que sobe da Agência contorna a arquibancada, que dá a volta na curva norte da pista (o
+// eixo do OSM, com dois nós só, passava reto por cima dela). Traçado aproximado.
+line({ kind: 'roadFix', way: 'way/549773529', insert: true, source: SRC_FIELD }, [[-23.5470481, -46.7712172], [-23.5471738, -46.7709625], [-23.5473715, -46.7709135]]);
+
+// ---------------------------------------------------------------- relevo: controle e platôs
+// O relevo SRTM é um modelo de superfície: perto dos prédios grandes ele sobe até ~19 m acima do
+// chão (o estacionamento do Balança virava um morro e o campo, uma depressão). Os pontos de
+// controle trazem a altitude real do chão; ver scripts/campus/controle-altimetrico.json.
+add({ kind: 'groundControl', source: controle.fonte, offset: controle.ajuste }, { type: 'MultiPoint', coordinates: controle.pontos.map(([lat, lon, alt]) => [r7(lon), r7(lat), alt]) });
+// Platôs: áreas que no local são planas. Altitudes do Google Earth + ajuste do controle.
+const plato = (id, name, earth, pts, extra = {}) => poly({ kind: 'plateau', id, name, altitude: earth + controle.ajuste, source: SRC_FIELD, ...extra }, ringLL(pts));
+// Estacionamento em frente ao Balança (térreo do prédio, onde fica o refeitório): 734 m.
+plato('estacionamento-balanca', 'Estacionamento do Balança', 734, [
+  [-23.5480542, -46.7748233], [-23.5478835, -46.7748086], [-23.5478395, -46.7747586], [-23.5475835, -46.7738640], [-23.5475646, -46.7737454],
+  [-23.5475511, -46.7736082], [-23.5476949, -46.7735788], [-23.5478745, -46.7735886], [-23.5479060, -46.7737062], [-23.5479194, -46.7738140],
+  [-23.5479419, -46.7738336], [-23.5480003, -46.7740100], [-23.5480632, -46.7741962], [-23.5481261, -46.7743922], [-23.5481979, -46.7745881],
+  [-23.5482698, -46.7747841], [-23.5482922, -46.7748576], [-23.5482249, -46.7748772],
+], { band: 10 });
+// Rua entre o Balança e o Prata, no nível da laje do Balança (que é estacionamento): 741 m.
+plato('rua-balanca-prata', 'Rua entre o Balança e o Prata', 741, [
+  [-23.5479778, -46.7737846], [-23.5480030, -46.7738228], [-23.5480425, -46.7739610], [-23.5480731, -46.7740149], [-23.5480946, -46.7741109],
+  [-23.5481252, -46.7741668], [-23.5481431, -46.7742197], [-23.5481997, -46.7744098], [-23.5482213, -46.7744412], [-23.5482383, -46.7744902],
+  [-23.5483417, -46.7745000], [-23.5483955, -46.7744118], [-23.5484000, -46.7743236], [-23.5483848, -46.7743040], [-23.5482994, -46.7742569],
+  [-23.5482267, -46.7740472], [-23.5482231, -46.7739992], [-23.5481817, -46.7739032], [-23.5481719, -46.7738689], [-23.5481323, -46.7737454],
+  [-23.5480272, -46.7737160],
+], { band: 8 });
 
 // ---------------------------------------------------------------- árvores
 add({ kind: 'trees', source: 'copas detectadas na imagem de satélite' }, { type: 'MultiPoint', coordinates: arvores.map(([lon, lat]) => [lon, lat]) });

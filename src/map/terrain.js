@@ -70,6 +70,46 @@ export function createTerrain(data, proj) {
     return cache.get(key);
   });
 
+  /**
+   * Corrige o relevo de satélite com pontos de controle [x, z, y] medidos no chão. O SRTM é um
+   * modelo de SUPERFÍCIE: incha vários metros perto de prédios grandes e de mata, o que deixava
+   * áreas planas com "barriga" e outras em falsa depressão. Cada vértice recebe a diferença
+   * (controle − relevo) interpolada entre os `nearest` pontos mais próximos (inverso do quadrado
+   * da distância); o efeito some suavemente entre `reach` e `reach + fade` metros do ponto mais
+   * próximo, para emendar com o relevo original em volta. Roda antes de escavar a água.
+   */
+  function applyControlPoints(points, { nearest = 6, reach = 45, fade = 70, soften = 6 } = {}) {
+    if (!points?.length) return null;
+    const control = points.map(([x, z, y]) => ({ x, z, delta: y - heightAt(x, z) })), limit = reach + fade;
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    for (const c of control) { minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x); minZ = Math.min(minZ, c.z); maxZ = Math.max(maxZ, c.z); }
+    const i0 = Math.max(0, Math.floor((minX - limit - x0) / dx)), i1 = Math.min(nx - 1, Math.ceil((maxX + limit - x0) / dx));
+    const j0 = Math.max(0, Math.floor((minZ - limit - z0) / dz)), j1 = Math.min(ny - 1, Math.ceil((maxZ + limit - z0) / dz));
+    const close = [];
+    let changed = 0, maxShift = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = x0 + i * dx, z = z0 + j * dz;
+      close.length = 0;
+      for (const c of control) {
+        const d2 = (c.x - x) ** 2 + (c.z - z) ** 2;
+        if (close.length < nearest || d2 < close[close.length - 1][0]) {
+          let k = close.length < nearest ? close.length : nearest - 1;
+          while (k > 0 && close[k - 1][0] > d2) { close[k] = close[k - 1]; k--; }
+          close[k] = [d2, c.delta];
+        }
+      }
+      const first = Math.sqrt(close[0][0]);
+      if (first >= limit) continue;
+      let sum = 0, weights = 0;
+      for (const [d2, delta] of close) { const w = 1 / (d2 + soften * soften) ** 1.5; sum += delta * w; weights += w; }
+      const t = Math.max(0, (first - reach) / fade), shift = sum / weights * (1 - t * t * (3 - 2 * t));
+      h[j * nx + i] += shift;
+      if (Math.abs(shift) > .01) changed++;
+      maxShift = Math.max(maxShift, Math.abs(shift));
+    }
+    return { points: control.length, changed, maxShift, deltas: control.map((c) => c.delta) };
+  }
+
   function gradePlatform(rings, { level, padding = 0, band = 16, maxAdjustment = Infinity, preserve = [] } = {}) {
     if (!rings?.[0]?.length) return null;
     const ring = rings[0];
@@ -105,7 +145,9 @@ export function createTerrain(data, proj) {
     return { level, changed, cutFill };
   }
 
-  function gradeCorridors(roads, { sidewalk = 2.5, band = 18, maxAdjustment = Infinity, maxGrade = .12, preserve = [], profileOnly = false, reuseProfiles = false } = {}) {
+  // `pinned(x, z)` -> cota fixa (ou undefined): nós de via dentro de platôs de projeto. Os demais
+  // nós se ajustam a eles respeitando a rampa máxima.
+  function gradeCorridors(roads, { sidewalk = 2.5, band = 18, maxAdjustment = Infinity, maxGrade = .12, preserve = [], profileOnly = false, reuseProfiles = false, pinned = null } = {}) {
     const grid = new SpatialGrid(24);
     const nodes = new Map(), edges = [], samples = new Map();
     const ordered = [...roads].sort((a, b) => String(a.id || JSON.stringify(a.pts)).localeCompare(String(b.id || JSON.stringify(b.pts))));
@@ -128,15 +170,19 @@ export function createTerrain(data, proj) {
       samples.set(r, profile);
       for (let i = 1; i < profile.length; i++) edges.push({ a: profile[i - 1], b: profile[i], limit: maxGrade * Math.hypot(profile[i].x - profile[i - 1].x, profile[i].z - profile[i - 1].z) });
     }
-    for (const node of nodes.values()) node.y = node.sum / node.count;
+    for (const node of nodes.values()) {
+      node.y = node.sum / node.count;
+      const level = pinned?.(node.x, node.z);
+      if (Number.isFinite(level)) { node.y = level; node.pinned = true; }
+    }
     // Two graph distance envelopes impose the slope bound exactly, even over a
     // long hill. Averaging their upper/lower solutions avoids lowering every hill
     // to the lowest road node. Shared OSM nodes keep connected branches coherent.
     const allNodes = [...nodes.values()];
     allNodes.forEach((node, i) => { node.index = i; node.neighbours = []; });
     for (const { a, b, limit } of edges) { a.neighbours.push([b.index, limit]); b.neighbours.push([a.index, limit]); }
-    const envelope = (sign) => {
-      const values = allNodes.map(node => node.y * sign), heap = [];
+    const envelope = (sign, onlyPinned = false) => {
+      const values = allNodes.map(node => onlyPinned && !node.pinned ? Infinity : node.y * sign), heap = [];
       const push = (item) => {
         let i = heap.length; heap.push(item);
         while (i && heap[(i - 1) >> 1][0] > item[0]) { heap[i] = heap[(i - 1) >> 1]; i = (i - 1) >> 1; }
@@ -157,14 +203,20 @@ export function createTerrain(data, proj) {
         }
         const [value, index] = first;
         if (value > values[index] + 1e-9) continue;
-        for (const [next, cost] of allNodes[index].neighbours) if (value + cost < values[next] - 1e-9) {
+        for (const [next, cost] of allNodes[index].neighbours) if (!allNodes[next].pinned && value + cost < values[next] - 1e-9) {
           values[next] = value + cost; push([values[next], next]);
         }
       }
       return values;
     };
+    // Pinned plateau nodes are hard constraints: first clamp every other node into their slope
+    // cone (averaging the two envelopes alone would only halve a violation against a fixed node).
+    if (allNodes.some(node => node.pinned)) {
+      const high = envelope(1, true), low = envelope(-1, true);
+      allNodes.forEach((node, i) => { if (!node.pinned) node.y = Math.max(-low[i], Math.min(high[i], node.y)); });
+    }
     const upper = envelope(1), lower = envelope(-1);
-    allNodes.forEach((node, i) => { node.y = (upper[i] - lower[i]) / 2; });
+    allNodes.forEach((node, i) => { if (!node.pinned) node.y = (upper[i] - lower[i]) / 2; });
     }
     let steepest = 0;
     for (const [r, profile] of samples) {
@@ -438,5 +490,5 @@ export function createTerrain(data, proj) {
     return mesh;
   }
 
-  return { heightAt, roadHeightAt, platformFor: (building) => platforms.get(building), prepareBuildingPlatform, carveWater, gradePlatform, gradeCorridors, gradeProfile, buildMesh, buildDetailMesh, base, bounds: { x0, z0, x1, z1, width, depth }, minAlt: data.min, maxAlt: data.max };
+  return { heightAt, roadHeightAt, platformFor: (building) => platforms.get(building), prepareBuildingPlatform, carveWater, applyControlPoints, gradePlatform, gradeCorridors, gradeProfile, buildMesh, buildDetailMesh, base, bounds: { x0, z0, x1, z1, width, depth }, minAlt: data.min, maxAlt: data.max };
 }

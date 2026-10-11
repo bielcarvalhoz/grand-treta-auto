@@ -208,3 +208,25 @@ test('unnamed internal service street gets two-way centre paint, flat road secti
     assert.equal(roads.surfaceHeightAt(50, 50, 0), -Infinity);
   } finally { delete globalThis.document; }
 });
+
+test('ground control shifts the satellite relief to surveyed heights and fades back to it', () => {
+  const t = makeTerrain(), far = t.heightAt(95, 95), a = t.heightAt(30, 30), b = t.heightAt(50, 30);
+  const report = t.applyControlPoints([[30, 30, a - 6], [50, 30, b - 2]], { reach: 15, fade: 20 });
+  assert.equal(report.points, 2);
+  assert.ok(report.changed > 20 && Math.abs(report.maxShift - 6) < .2);
+  assert.ok(Math.abs(t.heightAt(30, 30) - (a - 6)) < .15, 'surveyed height reproduced at the control point');
+  assert.ok(Math.abs(t.heightAt(50, 30) - (b - 2)) < .4);
+  assert.equal(t.heightAt(95, 95), far, 'relief beyond reach + fade is untouched');
+  // the correction never overshoots the surveyed differences
+  const fresh = makeTerrain();
+  for (let x = 5; x <= 95; x += 5) for (let z = 5; z <= 95; z += 5) { const shift = t.heightAt(x, z) - fresh.heightAt(x, z); assert.ok(shift <= 1e-6 && shift >= -6 - 1e-6); }
+});
+
+test('roads crossing a design plateau take its level and ramp to it within the grade limit', () => {
+  const terrain = createTerrain({ nx: 41, ny: 41, min: 0, max: 60, bbox: [0, 0, 100, 100], heights: Array.from({ length: 1681 }, (_, k) => (k % 41) * .75 + Math.floor(k / 41) * .1) }, proj);
+  const road = { id: 'a', w: 5, pts: [[5, 50], [95, 50]] }, level = 14;
+  const report = terrain.gradeCorridors([road], { profileOnly: true, maxGrade: .12, pinned: (x) => (x >= 40 && x <= 60 ? level : undefined) });
+  assert.ok(report.maxGrade <= .12 + 1e-6, `rampa de ${(report.maxGrade * 100).toFixed(1)}%`);
+  for (let x = 41; x <= 59; x += 1.5) assert.ok(Math.abs(terrain.roadHeightAt(road, x, 50) - level) < 1e-6, 'flat at the plateau level');
+  assert.ok(terrain.roadHeightAt(road, 8, 50) < level && terrain.roadHeightAt(road, 92, 50) > level, 'the hill continues on both sides');
+});

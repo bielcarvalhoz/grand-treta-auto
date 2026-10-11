@@ -13,7 +13,7 @@ const span = (p, d, w) => { const n = perp(d); return [[p[0] + n[0] * w / 2, p[1
  * Lances e patamares ao longo do eixo `path` (do topo para a base), ainda sem cotas: os níveis
  * são contados em espelhos abaixo do topo. Os últimos `ramps` trechos são rampa (sem degraus).
  */
-export function planStairway(path, { width = 3, rampWidth = 2.2, plaza = -1, plazaRadius = 2.7, ramps = 0, topLanding = 1.6 } = {}) {
+export function planStairway(path, { width = 3, rampWidth = 2.2, plaza = -1, plazaRadius = 2.7, ramps = 0, topLanding = 1.6, tread = TREAD } = {}) {
   const n = path.length, segments = [];
   for (let i = 0; i < n - 1; i++) {
     const dx = path[i + 1][0] - path[i][0], dz = path[i + 1][1] - path[i][1], L = Math.hypot(dx, dz), ramp = i >= n - 1 - ramps;
@@ -37,7 +37,7 @@ export function planStairway(path, { width = 3, rampWidth = 2.2, plaza = -1, pla
     const s = segments[i], a = along(s.a, s.d, after[i]), b = along(s.b, s.d, -before[i + 1]), run = s.L - after[i] - before[i + 1];
     if (run < .6) throw new Error(`trecho ${i} da escadaria curto demais (${run.toFixed(2)} m)`);
     if (s.ramp) rampsOut.push({ a, b, d: s.d, w: s.w, run, level0: level, last: i === n - 2 });
-    else { const k = Math.max(2, Math.round(run / TREAD)); flights.push({ a, b, d: s.d, w: s.w, k, tread: run / k, run, level0: level, index: i }); level += k; }
+    else { const k = Math.max(2, Math.round(run / tread)); flights.push({ a, b, d: s.d, w: s.w, k, tread: run / k, run, level0: level, index: i }); level += k; }
     if (i === n - 2) {
       if (!s.ramp) landings.push({ kind: 'bottom', node: s.b, level, ring: [...span(b, s.d, s.w), ...span(along(s.b, s.d, 1.6), s.d, s.w).reverse()], open: [span(b, s.d, s.w), span(along(s.b, s.d, 1.6), s.d, s.w)] });
       break;

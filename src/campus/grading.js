@@ -1,4 +1,4 @@
-import { distToSegment } from '../shared/geo.js';
+import { distToSegment, pointInPolygon } from '../shared/geo.js';
 import { referenceEntrance, pairedEntrances } from './reference.js';
 import { landmarkPlatformLevels } from './landmarks.js';
 
@@ -6,17 +6,40 @@ import { landmarkPlatformLevels } from './landmarks.js';
 // e antes de gerar a malha do relevo. Usa só a API pública do relevo do mapa
 // (gradePlatform, gradeCorridors, prepareBuildingPlatform, roadHeightAt, platformFor).
 
+/**
+ * Corrige o relevo de satélite com as altitudes de chão levantadas no campus. O SRTM é um modelo
+ * de superfície: sobe vários metros perto dos prédios grandes e da mata. Roda antes de tudo
+ * (inclusive de escavar a água).
+ */
+export function correctCampusTerrain(terrain, campus) {
+  const control = campus.groundControl;
+  if (!control?.length) return null;
+  return terrain.applyControlPoints(control.map(([x, z, altitude]) => [x, z, altitude - terrain.base]));
+}
+
 /** Local civil-work grading, applied after water carving and before mesh generation. */
 export function gradeCampusTerrain(world, terrain, campus) {
   const preserve = (world.areas || []).filter((a) => a.kind === 'water' || a.kind === 'pool').map((a) => a.rings);
-  const report = { roads: null, platforms: [], sports: null };
+  const report = { roads: null, platforms: [], sports: null, plateaus: [] };
+  // Platôs de projeto: áreas que no local são planas e niveladas (estacionamentos, baixada do
+  // campo). O relevo de satélite e a suavização das vias criavam barrigas e depressões; aqui a
+  // cota é imposta ao relevo e aos nós das vias que passam por dentro.
+  const plateaus = (campus.plateaus || []).map((p) => ({ ...p, level: p.altitude - terrain.base }));
+  plateaus.forEach((p, i) => {
+    const graded = terrain.gradePlatform(p.rings, { level: p.level, band: p.band ?? 12, preserve: [...preserve, ...plateaus.slice(0, i).map((q) => ({ rings: q.rings, margin: 0 }))] });
+    report.plateaus.push({ id: p.id, level: p.level, ...graded });
+  });
+  const plateauLevel = (x, z) => plateaus.find((p) => pointInPolygon(x, z, p.rings))?.level;
+  campus.plateauLevel = plateauLevel;
+  for (const p of plateaus) preserve.push({ rings: p.rings, margin: 0 });
   if (campus.track) {
     const T = campus.track;
     // The pitch, eight running lanes and bleachers share one engineered platform.
     // Sampling the field centre avoids the hillside beside the grandstand biasing it.
-    report.sports = terrain.gradePlatform([T.outer], { level: terrain.heightAt(T.cx, T.cz), band: 24, preserve });
+    // (pista levantada: transição curta, para não rebaixar a encosta da arquibancada nem a rua de trás)
+    report.sports = terrain.gradePlatform([T.outer], { level: terrain.heightAt(T.cx, T.cz), band: T.surveyed ? 9 : 24, preserve });
     T.groundLevel = report.sports.level;
-    if (Number.isFinite(T.rOut) && Number.isFinite(T.straight)) {
+    if (!T.surveyed && Number.isFinite(T.rOut) && Number.isFinite(T.straight)) {
       const side = -T.uz >= 0 ? 1 : -1, sx = -T.uz * side, sz = T.ux * side;
       const len = T.straight * 2 - 6, near = T.rOut + 1.5, far = near + 13;
       const bleachers = [[-1, near], [1, near], [1, far], [-1, far]].map(([s, off]) => [T.cx + T.ux * s * len / 2 + sx * off, T.cz + T.uz * s * len / 2 + sz * off]);
@@ -24,13 +47,19 @@ export function gradeCampusTerrain(world, terrain, campus) {
       preserve.push([bleachers]);
     }
     preserve.push([T.outer]);
+    // quadras vizinhas ao campo (tênis): planas, no mesmo nível do conjunto esportivo
+    for (const court of world.areas || []) {
+      if (!['tennis', 'court'].includes(court.kind) || court.rings[0].every(([x, z]) => Math.hypot(x - T.cx, z - T.cz) > T.rOut + T.straight + 90)) continue;
+      terrain.gradePlatform(court.rings, { level: T.groundLevel, band: 8, preserve });
+      preserve.push(court.rings);
+    }
   }
   const internalRoads = world.roads.filter(r => r.internal && !r.bridge && r.kind !== 'foot');
   for (const r of internalRoads) { r.kind = 'twoway'; r.lanes = 2; }
   // Set the engineering datum before foundations alter the hillside. Recomputing
   // the street from a raised foundation feeds the building's embankment back into
   // its approach road, producing an artificial cliff at the entrance.
-  terrain.gradeCorridors(internalRoads, { profileOnly: true });
+  terrain.gradeCorridors(internalRoads, { profileOnly: true, pinned: plateaus.length ? plateauLevel : null });
   const frontageLevels = new Map();
   for (const apron of campus.platformAprons || []) {
     if (!apron.sample) continue;
@@ -42,7 +71,8 @@ export function gradeCampusTerrain(world, terrain, campus) {
   // These photographed low entrances sit beside streets substantially below the
   // SRTM footprint median. Cut the complete foundation to its approach datum;
   // raising only a tiny entrance apron would merely move the cliff to the street.
-  const entranceOffsets = new Map([['b21', .20], ['m2', .15], ['m0', .15]]);
+  // (a Agência fica ao pé do barranco: a mediana da planta pegava a encosta de trás)
+  const entranceOffsets = new Map([['b21', .20], ['m2', .15], ['m0', .15], ['b34', .15]]);
   for (const b of campus.buildings) {
     const id = b.planId || b.id;
     if (!entranceOffsets.has(id) || frontageLevels.has(id)) continue;

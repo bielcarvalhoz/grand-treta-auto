@@ -16,6 +16,7 @@ const SIDEWALK = 2.5, RISER = .172;
 export const WALK = .41;
 const C_STEP = '#5f5f5c', C_BEIGE = '#e6ded1', C_RAIL = '#30343a', C_SLAB = '#b9b3a6', C_WHITE = '#eeeeea', C_STEEL = '#a9b0b4';
 const C_BROWN = '#8d4a3c', C_RED = '#c0262d', C_ZEBRA = '#f1eee2', C_YELLOW = '#e2b93b', C_MAT = '#1c1d1f', C_GREEN = '#1f4a3a';
+const C_ASPHALT = '#4b4e52', C_PAINT = '#f1efe4', C_CABIN = '#24303b', CAR_COLORS = ['#d9d9d6', '#1d2025', '#7a1f24', '#2c4a7a', '#bdbdb8', '#3b3f44'];
 const C_TOTEM = '#8f9497', C_COPPER = '#a0603f', C_TREAD = '#8d8d8a', C_POT = '#b9b4a8', C_LEAF = '#3d8a3f', C_BIN = '#6b7175', C_AWNING = '#3b4046', C_GREY = '#9aa0a3';
 
 /** via interna mais próxima: ponto do eixo, direção e folga até o meio-fio */
@@ -64,8 +65,20 @@ export function prepareAlley(C, mark) {
   const block = clipHalfPlane(ring, (p) => U(p) <= uA - width / 2, cutAt(uA - width / 2));
   if (main.length < 3 || block.length < 3) return null;
   const vs = [...main, ...block].filter((p) => Math.abs(U(p) - uA) < width / 2 + .01).map(V);
-  C.buildings[index] = { ...b, rings: [main], referenceAccess: true };
+  C.buildings[index] = { ...b, rings: [main], referenceAccess: true, deckRoof: true };
   return { building: mark.building, pieces: [C.buildings[index]], block: convexHull(block), cx, cz, ux, uz, nx, nz, uA, width, v0: Math.min(...vs), v1: Math.max(...vs), at, U, V, uMax: Math.max(...ring.map(U)), uMin: Math.min(...ring.map(U)) };
+}
+
+/** [v mínimo, v máximo] onde a reta u = const (no sistema do beco) corta as plantas dadas */
+export function spanAt(alley, u, rings) {
+  let lo = Infinity, hi = -Infinity;
+  for (const ring of rings) for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], ua = alley.U(a), ub = alley.U(b);
+    if ((ua - u) * (ub - u) > 0 || ua === ub) continue;
+    const v = alley.V(a) + (alley.V(b) - alley.V(a)) * (u - ua) / (ub - ua);
+    lo = Math.min(lo, v); hi = Math.max(hi, v);
+  }
+  return [lo, hi];
 }
 
 /** fachada (aresta externa longa) do prédio mais próxima de um ponto, olhando para `facing` */
@@ -266,6 +279,67 @@ export function buildPrataAccess(kit, C, { ground, roads, surfaceAt, sidewalkAt 
     const lamp = frameAt(centre[0] - alley.nx * 1.5, centre[1] - alley.nz * 1.5, yawOf(-alley.nx, -alley.nz), topY);
     kit.cylinder(C_GREY, lamp, 0, 3, 0, .07, 6, 'y', 8); kit.tube(C_GREY, lamp, [0, 6, 0], [1.6, 6.5, 0], .05, 6); kit.box(C_GREY, lamp, 1.85, 6.48, 0, .6, .12, .26);
     solid(rectRing(lamp, -.12, -.12, .12, .12), topY + 6, 'poste');
+
+    // Laje do Balança: é estacionamento, rente à calçada da rua de trás. Mureta onde ela fica
+    // acima do chão (lado do estacionamento de baixo, pontas e trecho em que a rua desce).
+    const piece = alley.pieces[0], deckY = piece.deckLevel;
+    if (Number.isFinite(deckY)) {
+      const ring = piece.rings[0], across = frameAt(0, 0, yawOf(alley.nx, alley.nz));   // +x local = atravessando a laje, rumo à rua
+      for (const e of exteriorEdges(ring)) {
+        if (e.L < .6) continue;
+        const low = [.2, .5, .8].some((t) => ground(e.ax + (e.bx - e.ax) * t + e.nx * 1.6, e.az + (e.bz - e.az) * t + e.nz * 1.6) < deckY - .7);
+        if (!low) continue;
+        const a = [e.ax - e.nx * .12, e.az - e.nz * .12], b = [e.bx - e.nx * .12, e.bz - e.nz * .12];
+        kit.wall(C_BEIGE, a, b, .22, deckY - .05, deckY + .95, deckY - .05, deckY + .95);
+        solid([[e.ax, e.az], [e.bx, e.bz], [e.bx - e.nx * .24, e.bz - e.nz * .24], [e.ax - e.nx * .24, e.az - e.nz * .24]], deckY + .95, 'mureta-laje');
+      }
+      // vagas do lado do estacionamento de baixo e alguns carros
+      let bay = 0;
+      for (let u = alley.uA + half + 3; u < alley.uMax - 2.5; u += 2.5, bay++) {
+        const [v0, v1] = spanAt(alley, u, [ring]);
+        if (!(v1 - v0 > 9.5)) continue;
+        const [lx, lz] = alley.at(u, v0 + 2.9);
+        kit.box(C_PAINT, { ...across, x: lx, z: lz, y: deckY }, 0, .012, 0, 4.7, .024, .1);
+        const [w0, w1] = spanAt(alley, u + 1.25, [ring]);
+        if (bay % 3 !== 1 || !(w1 - w0 > 9.5)) continue;
+        const [cx, cz] = alley.at(u + 1.25, w0 + 2.9), car = { ...across, x: cx, z: cz, y: deckY };
+        kit.box(CAR_COLORS[(bay * 5 + 1) % CAR_COLORS.length], car, 0, .62, 0, 4.2, .75, 1.75);
+        kit.box(C_CABIN, car, -.2, 1.28, 0, 2.2, .6, 1.5);
+        solid(rectRing(car, -2.1, -.9, 2.1, .9), deckY + 1.55, 'carro-laje');
+      }
+      // A laje segue até a calçada da rua de trás (não há gramado por cima dela): piso de
+      // concreto no recuo entre a planta e a calçada, com mureta baixa do lado da rua.
+      const strip = [];
+      for (let u = alley.uA + half + 6.2; u <= alley.uMax - .4; u += 1.5) {
+        const v1 = spanAt(alley, u, [ring])[1];
+        if (!Number.isFinite(v1)) continue;
+        for (let t = .25; t <= 16; t += .25) if (roadClearance(roads, ...alley.at(u, v1 + t)) <= SIDEWALK + .05) { if (ground(...alley.at(u, v1 + t * .5)) > deckY - .6) strip.push({ u, v1, t }); break; }
+      }
+      const stripAt = (q, k) => { const [x, z] = alley.at(q.u, q.v1 - 1.6 + (q.t + 1.6) * k); return [x, Math.max(ground(x, z) + .06, k ? -Infinity : deckY + .012), z]; };
+      for (let i = 1; i < strip.length; i++) if (strip[i].u - strip[i - 1].u < 1.6) for (let k = 0; k < 3; k++) kit.quad(piece.roof || C_BEIGE, stripAt(strip[i - 1], k / 3), stripAt(strip[i], k / 3), stripAt(strip[i], (k + 1) / 3), stripAt(strip[i - 1], (k + 1) / 3), [0, 1, 0]);
+      if (strip.length > 1) exclusions.push({ kind: 'laje-recuo', rings: [[...strip.map((q) => alley.at(q.u, q.v1 - .4)), ...strip.slice().reverse().map((q) => alley.at(q.u, q.v1 + q.t + .3))]] });
+      // entrada de veículos: asfalto ligando a rua à laje onde o recuo é menor
+      let drive = null;
+      for (let u = alley.uA + half + 9; u < alley.uMax - 9; u += 1) {
+        const v1 = spanAt(alley, u, [ring])[1];
+        if (!Number.isFinite(v1) || ground(...alley.at(u, v1 + 1)) < deckY - .35) continue;
+        for (let t = .5; t <= 14; t += .5) if (roadClearance(roads, ...alley.at(u, v1 + t)) <= .1) { if (!drive || t < drive.t) drive = { u, v1, t }; break; }
+      }
+      if (drive) {
+        const at = (du, t) => { const [x, z] = alley.at(drive.u + du, spanAt(alley, drive.u + du, [ring])[1] + t); return [x, levelAt(x, z) + .085, z]; };
+        kit.drape(C_ASPHALT, (du, t) => at(du, t), -3.4, -.05, 3.4, drive.t + .3, .7);
+        exclusions.push({ kind: 'entrada-laje', rings: [[alley.at(drive.u - 4.5, drive.v1 - .5), alley.at(drive.u + 4.5, drive.v1 - .5), alley.at(drive.u + 4.5, drive.v1 + drive.t + 1), alley.at(drive.u - 4.5, drive.v1 + drive.t + 1)]] });
+      }
+      // mureta baixa entre a laje e a calçada, aberta na entrada de veículos
+      for (let i = 1; i < strip.length; i++) {
+        const a = strip[i - 1], b = strip[i];
+        if (b.u - a.u > 1.6 || (drive && Math.abs((a.u + b.u) / 2 - drive.u) < 4.3)) continue;
+        const p = alley.at(a.u, a.v1 + a.t - .12), q = alley.at(b.u, b.v1 + b.t - .12), y = Math.min(ground(...p), ground(...q));
+        kit.wall(C_BEIGE, p, q, .2, y - .1, y + .5, y - .1, y + .5);
+        solid([alley.at(a.u, a.v1 + a.t - .22), alley.at(b.u, b.v1 + b.t - .22), alley.at(b.u, b.v1 + b.t - .02), alley.at(a.u, a.v1 + a.t - .02)], y + .5, 'mureta-laje');
+      }
+      notes.deck = { level: deckY, strip: strip.length, drive: drive && alley.at(drive.u, drive.v1 + drive.t / 2), walk: [alley.at(alley.uA + half + 14, alley.v1 + 2.5), alley.at(alley.uA + half + 14, 0)] };
+    }
 
     // Lado do estacionamento. +x corre pela fachada com +z para o estacionamento; a calçada
     // acompanha a via de manobra.

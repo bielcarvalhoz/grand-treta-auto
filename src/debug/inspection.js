@@ -12,6 +12,12 @@ export function inspectScene(app, view) {
     const B=campus.details.root.userData.bridge,x=(B.red.x+B.ruby.x)/2,z=(B.red.z+B.ruby.z)/2;
     camera.position.set(x-B.red.dx*19,terrain.heightAt(x,z)+3.3,z-B.red.dz*19);
     camera.lookAt(x,Math.min(B.floor,terrain.heightAt(x,z)+7),z);
+  } else if(['convivencia','piscina','quadras','lago2'].includes(view)&&C.leisure){
+    const G=C.leisure,T=C.track,y=T.groundLevel,look=(p,h,q)=>{camera.position.set(p[0],y+h,p[1]);camera.lookAt(q[0],y,q[1]);};
+    if(view==='convivencia')look([T.cx-150,T.cz+20],90,[T.cx,T.cz]);
+    else if(view==='piscina')look([G.piscina.ilha[0]-12,G.piscina.ilha[1]+38],26,G.piscina.ilha);
+    else if(view==='quadras')look(T.at(T.straight+60,-10),32,T.at(T.straight+10,0));
+    else look([G.estatua[0]-30,G.estatua[1]+70],30,G.quiosques[1]);
   } else if(['escadaria','beco','menos2','terreo'].includes(view)&&campus.landmarks){
     // marcos levantados em campo: câmera na altura dos olhos, no começo do percurso
     const L=campus.landmarks.plan,S=L.stairways[0],A=L.access;
