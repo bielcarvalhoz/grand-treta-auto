@@ -104,8 +104,8 @@ export function createKit(renderer) {
       signs.get(key).geometries.push(g);
     },
     /** placa texturizada em 4 cantos do mundo [x, y, z]: inf-esq, inf-dir, sup-dir, sup-esq */
-    signCorners(key, paint, [a, b, c, d], { size = [512, 256] } = {}) {
-      if (!signs.has(key)) signs.set(key, { paint, size, geometries: [] });
+    signCorners(key, paint, [a, b, c, d], { size = [512, 256], lit = false } = {}) {
+      if (!signs.has(key)) signs.set(key, { paint, size, lit, geometries: [] });
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...c, ...a, ...c, ...d], 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], 2));
@@ -132,7 +132,7 @@ export function createKit(renderer) {
         for (let i = 0; i < list.length; i += 3) { positions.push(list[i], list[i + 1], list[i + 2]); colors.push(tint.r, tint.g, tint.b); }
       }
       if (positions.length) mesh(`${name}-pecas`, positions, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .82, side: THREE.DoubleSide }), colors).castShadow = true;
-      for (const [key, { paint, size, geometries }] of signs) {
+      for (const [key, { paint, size, lit, geometries }] of signs) {
         let map = null;
         if (typeof document !== 'undefined') {
           const canvas = document.createElement('canvas'); canvas.width = size[0]; canvas.height = size[1];
@@ -151,8 +151,11 @@ export function createKit(renderer) {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
         geometry.computeVertexNormals();
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map, color: 0xffffff, side: THREE.DoubleSide }));
-        mesh.name = `${name}-placa-${key}`; mesh.receiveShadow = false; root.add(mesh);
+        // `lit`: pintura de piso (quadras), iluminada e recebendo sombra como o chão
+        const material = lit ? new THREE.MeshStandardMaterial({ map, roughness: .92, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 })
+          : new THREE.MeshBasicMaterial({ map, color: 0xffffff, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = `${name}-placa-${key}`; mesh.receiveShadow = lit; root.add(mesh);
       }
       const stats = { meshes: 0, triangles: 0 };
       root.traverse((o) => { if (o.isMesh) { stats.meshes++; stats.triangles += o.geometry.attributes.position.count / 3; } });
