@@ -10,7 +10,14 @@ export function createPaintballModule(game) {
   const $ = (id) => document.getElementById(id);
   const player = game.player;
   const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen;
-  const paintball = createPaintball({ scene, camera, getActive: paintEnabled, onShot: weapon => game.audio?.shot(weapon) });
+  const paintball = createPaintball({
+    scene, camera, getActive: paintEnabled,
+    colliderRoots: () => game.training?.active ? [game.training.floor] : [scene],
+    updateWeaponPose: (gun, state) => player.updateWeapon?.(gun, state),
+    getShotOrigin: target => player.getShotOrigin ? player.getShotOrigin(target) : camera.getWorldPosition(target),
+    onShot: weapon => { game.audio?.shot(weapon); player.avatar?.playShot(); },
+  });
+  game.events.on('modechange', () => { paintball.resetInput(); paintball.clearEffects(); });
 
   // cor da tinta (menu inicial + botão do HUD)
   const colorChoice = $('paint-color');

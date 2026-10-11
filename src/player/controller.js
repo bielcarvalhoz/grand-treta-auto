@@ -13,10 +13,13 @@ const GRAVITY = 22;
 const STEP_UP = 0.7;
 const TOUCH_FLY_SPEED = 16; // m/s
 
-export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, roofAt, bounds }) {
+export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, roofAt, bounds, allowFlight = () => true }) {
   const controls = new PointerLockControls(camera, dom);
   const keys = new Set();
   const feet = new THREE.Vector3();
+  const eyePosition = new THREE.Vector3();
+  const velocity = new THREE.Vector3();
+  let cameraMode = 'third';
   let vy = 0;
   let onGround = false;
   let fly = false; // voo livre do teclado (F)
@@ -89,6 +92,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   });
 
   function toggleAutoFly() {
+    if (!allowFlight()) return false;
     autoFly = !autoFly;
     fly = false;
     vy = 0;
@@ -105,7 +109,7 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
   const onKey = (e, down) => {
     if (down) keys.add(e.code); else keys.delete(e.code);
     if (down && e.code === 'Space') jump();
-    if (down && e.code === 'KeyF') { fly = !fly; autoFly = false; vy = 0; }
+    if (down && !e.repeat && e.code === 'KeyF' && allowFlight()) { fly = !fly; autoFly = false; vy = 0; }
   };
   window.addEventListener('keydown', (e) => {
     if (e.target?.closest?.('button, input, select, textarea, [contenteditable=true]')) return;
@@ -130,16 +134,45 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     feet.y = groundAt(x, z, feet.y + 100);
     if (feet.y > terrain.heightAt(x, z) + 3) feet.y = terrain.heightAt(x, z); // não nascer em telhado
     vy = 0;
-    autoFly = false;
-    camera.position.set(x, feet.y + EYE, z);
+    autoFly = fly = false;
+    velocity.set(0, 0, 0);
     camera.rotation.set(0, yaw, 0, 'YXZ');
+    updateCamera();
+  }
+
+  // Sweep a small camera volume from the eyes to the shoulder view. This uses
+  // the same obstacle and terrain queries as movement, including training mode.
+  const cameraOffset = new THREE.Vector3(), sample = new THREE.Vector3();
+  function updateCamera() {
+    eyePosition.copy(feet).y += EYE;
+    camera.position.copy(eyePosition);
+    if (cameraMode === 'first') return;
+    cameraOffset.set(.48, .12, focusedAim ? 2.05 : 3.15).applyQuaternion(camera.quaternion);
+    const steps = Math.ceil(cameraOffset.length() / .12);
+    let clear = 0;
+    for (let i = 1; i <= steps; i++) {
+      sample.copy(eyePosition).addScaledVector(cameraOffset, i / steps);
+      const [x, z] = collide(sample.x, sample.z, .18, sample.y - .18);
+      if (Math.hypot(x - sample.x, z - sample.z) > .015 || sample.y < terrain.heightAt(sample.x, sample.z) + .2) break;
+      clear = i / steps;
+    }
+    camera.position.addScaledVector(cameraOffset, clear);
+  }
+
+  function setCameraMode(value) {
+    if (value !== 'first' && value !== 'third') return cameraMode;
+    cameraMode = value;
+    updateCamera();
+    events.dispatchEvent(new CustomEvent('cameramode', { detail: { mode: value } }));
+    return cameraMode;
   }
 
   const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3();
 
   function update(dt) {
-    if (!active) return;
+    if (!active) { velocity.set(0, 0, 0); return; }
     dt = Math.min(dt, 0.05);
+    const before = feet.clone();
     const run = !focusedAim && (keys.has('ShiftLeft') || keys.has('ShiftRight') || (mode === 'touch' && stickY > .9 && Math.hypot(stickX, stickY) > .97));
     const flying = fly || autoFly;
     const speed = fly ? (run ? 90 : 28) : focusedAim ? 3.1 : run ? 9.5 : 4.6;
@@ -195,11 +228,13 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
 
     // não sair do mapa nem subir demais
     const m = 3;
-    feet.x = Math.min(bounds.x1 - m, Math.max(bounds.x0 + m, feet.x));
-    feet.z = Math.min(bounds.z1 - m, Math.max(bounds.z0 + m, feet.z));
+    const limits = typeof bounds === 'function' ? bounds() : bounds;
+    feet.x = Math.min(limits.x1 - m, Math.max(limits.x0 + m, feet.x));
+    feet.z = Math.min(limits.z1 - m, Math.max(limits.z0 + m, feet.z));
     feet.y = Math.min(feet.y, terrain.heightAt(feet.x, feet.z) + 400);
 
-    camera.position.set(feet.x, feet.y + EYE, feet.z);
+    velocity.copy(feet).sub(before).divideScalar(Math.max(dt, 1e-6));
+    updateCamera();
   }
 
   return {
@@ -209,6 +244,12 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     update,
     placeAt,
     feet,
+    eyePosition,
+    velocity,
+    updateCamera,
+    setCameraMode,
+    toggleCameraMode: () => setCameraMode(cameraMode === 'first' ? 'third' : 'first'),
+    getShotOrigin: target => target.copy(eyePosition),
     toggleAutoFly,
     jump,
     setFocusedAim(value) { focusedAim = active && !!value; controls.pointerSpeed = focusedAim ? .52 : 1; },
@@ -217,6 +258,8 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     get dragMode() { return mode === 'drag'; },
     get touchMode() { return mode === 'touch'; },
     get fly() { return fly || autoFly; },
+    get grounded() { return onGround; },
+    get cameraMode() { return cameraMode; },
     get yaw() { const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ'); return e.y; },
   };
 }

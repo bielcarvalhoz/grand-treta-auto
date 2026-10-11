@@ -31,7 +31,7 @@ test('game modes wait for readiness; settings are usable and restart requires co
     const {createFrontMenu} = await import('../../src/ui/front-menu.js');
     const menu = createFrontMenu(), modes = [];
     const send = type => { const e = new Event(type); Object.assign(e, {pointerType: 'touch', detail: 1}); el('tour').dispatchEvent(e); };
-    assert.equal(el('play').disabled,true); assert.equal(el('tour').disabled,true);
+    assert.equal(el('play').disabled,true); assert.equal(el('tour').disabled,true); assert.equal(el('training').disabled,true);
     assert.notEqual(el('settings-open').disabled,true);
     send('click'); assert.equal(el('overlay').classList.contains('hidden'),false);
     el('settings-open').dispatchEvent(new Event('click'));
@@ -51,10 +51,12 @@ test('game modes wait for readiness; settings are usable and restart requires co
     assert.equal(el('overlay').classList.contains('hidden'), false, 'menu must remain until compatibility click');
     send('click'); assert.equal(el('overlay').classList.contains('hidden'), false);
     menu.ready({ui: {startMode: (mode, touch) => modes.push({mode, touch})}});
-    assert.equal(el('play').disabled,false); assert.equal(el('tour').disabled,false);
+    assert.equal(el('play').disabled,false); assert.equal(el('tour').disabled,false); assert.equal(el('training').disabled,false);
     assert.deepEqual(modes, []);
     send('pointerdown'); send('pointerup'); assert.deepEqual(modes, []);
     send('click'); assert.deepEqual(modes, [{mode: 'tour', touch: true}]);
+    el('training').dispatchEvent(new Event('click'));
+    assert.deepEqual(modes.at(-1), {mode: 'training', touch: false});
     assert.equal(bar.attrs['aria-valuenow'], 100); assert.equal(label.textContent, '100%'); assert.equal(bar.child.style.transform, 'scaleX(1)');
     el('settings-apply').dispatchEvent(new Event('click'));
     assert.match(el('restart-description').textContent,/voltará ao menu/);

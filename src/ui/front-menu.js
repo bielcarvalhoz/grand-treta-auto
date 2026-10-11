@@ -52,7 +52,7 @@ export function createFrontMenu() {
   document.addEventListener?.('click', e => {
     const button = e.target.closest?.('button, summary');
     if (!button || button.disabled || button.id === 'btn-fire') return;
-    audio.ui(/back|close|cancel|menu/.test(button.id) ? 'back' : /play|tour$/.test(button.id) ? 'start' : 'select');
+    audio.ui(/back|close|cancel|menu/.test(button.id) ? 'back' : /play|tour$|training$/.test(button.id) ? 'start' : 'select');
   });
   document.addEventListener?.('change', () => audio.ui('confirm'));
   document.addEventListener?.('pointerover', e => {
@@ -63,7 +63,7 @@ export function createFrontMenu() {
     if (e.target.matches?.('#overlay button, #tour-panel button, #map-panel button') && !e.target.disabled) audio.ui();
   });
   let game = null;
-  const modeButtons = [$('play'), $('tour')];
+  const modeButtons = [$('play'), $('training'), $('tour')];
   for (const button of modeButtons) { button.disabled = true; button.setAttribute('aria-describedby', 'loading-text'); }
   const settingsPanel = $('settings-panel'), options = document.querySelector('.menu-options');
   const showSettings = on => {
@@ -91,7 +91,7 @@ export function createFrontMenu() {
     if (failed || !game) return;
     game.ui.startMode(mode, touch);
   };
-  for (const [id, mode] of [['play', 'campaign'], ['tour', 'tour']]) {
+  for (const [id, mode] of [['play', 'campaign'], ['training', 'training'], ['tour', 'tour']]) {
     let pointerType = '';
     $(id).addEventListener('pointerdown', e => { pointerType = e.pointerType; });
     // Commit navigation on the click, after the touch gesture has completed.

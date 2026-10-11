@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createPaintballModule} from '../../src/gameplay/paintball/index.js';
+import {createEvents} from '../../src/core/events.js';
 
 test('right/left mouse button chords aim and fire independently, ignoring touch compatibility mouse events', () => {
   const originals=Object.fromEntries(['window','document'].map(k=>[k,globalThis[k]]));
@@ -17,7 +18,7 @@ test('right/left mouse button chords aim and fire independently, ignoring touch 
   globalThis.document=Object.assign(new EventTarget(),{getElementById:element,createElement:()=>({}),body:element('body'),pointerLockElement:canvas});
   let focused=false,system;
   const player={active:true,touchMode:false,events:new EventTarget(),bindFireButton(){},setFocusedAim:value=>focused=value};
-  const game={engine:{scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(70),renderer:{domElement:canvas},addSystem:fn=>system=fn},player,debug:{},input:{bind(){}},toast(){}};
+  const game={engine:{scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(70),renderer:{domElement:canvas},addSystem:fn=>system=fn},player,debug:{},events:createEvents(),input:{bind(){}},toast(){}};
   try {
     const paint=createPaintballModule(game);paint.setWeapon('automatic');
     const send=(target,type,button)=>{const event=new Event(type,{cancelable:true});Object.assign(event,{button,clientX:100,clientY:100});target.dispatchEvent(event);};
