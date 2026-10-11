@@ -63,6 +63,14 @@ Na primeira pessoa os ombros ficam atrás do plano próximo da câmera, e o recu
 aditivo tem peso reduzido para manter o retículo visível. O scroll no canvas ativo
 seleciona primeira pessoa para cima e terceira para baixo, sem interferir no mapa/tour.
 
+A postura de mira compensa a rotação do quadril na primeira vértebra e mantém
+yaw/roll da arma estáveis ao andar ou disparar, movendo a cadeia inteira de braços.
+A locomoção usa `Jog_Fwd_Loop` e `Sprint_Loop` com playback proporcional à velocidade
+real (velocidades de contato dos pés medidas: 4,588 e 7,015 m/s no tamanho do jogo).
+`player/hair.js` aplica uma leve inclinação das pontas/franja em geometria clonada,
+sem reexportar o GLB. A classe `body.playing`, vinculada a lock/unlock do jogador,
+oculta o cursor no jogo e restaura o cursor ao abrir menus/mapa.
+
 `core/training.js` expõe `start()`, `stop()`, `active`, `floor`, `terrain`, `bounds`
 e consultas de colisão/pisos/telhados compatíveis com as usadas pelo personagem.
 O modo `training` oculta a cidade e usa uma área plana isolada; `player/index.js`

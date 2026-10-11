@@ -8,6 +8,8 @@ SHA-256: `96cb51b751f9664cc797bdf04c0d29196dbd8d671b8ba4f4085d439b54f50e20`.
 O jogo carrega este único arquivo para ambas as câmeras. A primeira pessoa exibe
 somente `Sato_arm_hand_L` e `Sato_arm_hand_R`; as duas vistas compartilham o mesmo
 esqueleto e os mesmos materiais. O alinhamento das armas acontece no runtime.
+`player/hair.js` inclina e abaixa discretamente pontas/franja em uma cópia da
+geometria em memória. O arquivo original, UVs, pesos e animações permanecem preservados.
 
 ## Armas
 

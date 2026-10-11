@@ -45,7 +45,7 @@ test('weapons follow the original hand socket through camera changes, shooting, 
       avatar.update(.016); avatar.updateWeapon(gun, { weapon, aimBlend: .8, recoil: .6, active: true });
       assert.ok(avatar.weaponDiagnostics.gripError < .003, `${mode}/${weapon}/${pitch}/${yaw}: detached weapon`);
       const position = gun.position.clone();
-      avatar.updateWeapon(gun, { weapon, aimBlend: .8, active: true });
+      avatar.updateWeapon(gun, { weapon, aimBlend: .8, recoil: .6, active: true });
       assert.ok(gun.position.distanceTo(position) < .00001, 'same-frame shot updates must not drift the shared arm root');
       for (const side of ['R', 'L']) assert.ok([...avatar.bones[`DEF-hand${side}`].matrixWorld.elements].every(Number.isFinite));
     }
@@ -79,6 +79,21 @@ test('third-person aim tracks camera pitch and shooting retains the selected aim
     for (let frame = 0; frame < 16; frame++) {
       avatar.update(.05); avatar.updateWeapon(gun);
       assert.ok(forward().angleTo(aimed) < .35, `camera pitch ${pitch}: shooting resets the aimed pose`);
+    }
+  }
+});
+
+test('locomotion and held repeated fire never turn the weapon sideways', async () => {
+  const { avatar, player, camera, gun } = await fixture();
+  camera.rotation.set(.3, .65, 0, 'YXZ');
+  for (const mode of ['first', 'third']) for (const speed of [3.1, 4.6, 9.5]) for (const side of [-1, 1]) {
+    player.cameraMode = mode; player.velocity.set(speed * side, 0, 0);
+    for (let frame = 0; frame < 90; frame++) {
+      if (frame % 8 === 0) avatar.playShot();
+      avatar.update(.016); avatar.updateWeapon(gun, { active: true });
+      const frameRotation = mode === 'first' ? camera.quaternion.clone() : new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
+      const relative = new THREE.Euler().setFromQuaternion(frameRotation.invert().multiply(gun.quaternion), 'YXZ');
+      assert.ok(Math.abs(relative.y) < .00001 && Math.abs(relative.z) < .00001, `${mode}/${speed}: strafe or recoil introduced sideways aim`);
     }
   }
 });

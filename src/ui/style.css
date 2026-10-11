@@ -79,6 +79,7 @@ body.flying #hud-mode { color: #4fc3f7; }
 @font-face { font-family: 'Cover'; src: url('/fonts/Anton-Regular.woff') format('woff'); font-display: swap; }
 button, select { font: inherit; }
 button { cursor: pointer; }
+body.playing, body.playing * { cursor: none !important; }
 button:focus-visible, select:focus-visible, summary:focus-visible, canvas:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 [hidden] { display: none !important; }
 
