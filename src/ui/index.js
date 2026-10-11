@@ -5,6 +5,7 @@ import { placeMarker } from './marker-layout.js';
 import { installGestureGuard } from './gestures.js';
 import { createWeaponWheel } from './weapon-wheel.js';
 import { createSniperScope } from './sniper-scope.js';
+import { createTrainingPosePanel } from './training-pose.js';
 import './style.css';
 
 export { loading, createFrontMenu } from './front-menu.js';
@@ -25,6 +26,7 @@ export function createUI(game) {
   let touchSession = IS_TOUCH;
   const weaponWheel = createWeaponWheel(game);
   const sniperScope = createSniperScope(game);
+  const posePanel = createTrainingPosePanel(game);
 
   const toast = msg => {
     const el = $('toast'); el.textContent = msg; el.classList.add('show');
@@ -262,5 +264,5 @@ export function createUI(game) {
     updateOrientation();
     if (tour.active) tour.setViewportInset(innerHeight - $('tour-panel').getBoundingClientRect().top + 12);
   });
-  return { toast, hud, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); }, get weaponWheelOpen() { return weaponWheel.open; } };
+  return { toast, hud, posePanel, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); }, get weaponWheelOpen() { return weaponWheel.open; } };
 }

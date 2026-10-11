@@ -289,6 +289,10 @@ export function createPlayer(camera, dom, { terrain, collide, bridgeHeightAt, ro
     setFocusedAim(value) { focusedAim = active && !!value; controls.pointerSpeed = weaponWheelOpen ? 0 : focusedAim ? .52 : 1; },
     setWeaponWheelOpen(value) { weaponWheelOpen = active && !!value; controls.pointerSpeed = weaponWheelOpen ? 0 : focusedAim ? .52 : 1; dragging = false; },
     bindFireButton: touchControls.bindFireButton,
+    releasePointerForUI() {
+      keys.clear(); dragging = false; touchControls.reset();
+      if (controls.isLocked) { mode = 'drag'; controls.unlock(); }
+    },
     get active() { return active; },
     get dragMode() { return mode === 'drag'; },
     get touchMode() { return mode === 'touch'; },

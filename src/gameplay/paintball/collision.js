@@ -13,9 +13,12 @@ export function preparePaintColliders(meshes) {
     if (mesh.isInstancedMesh && !mesh.boundingBox) mesh.computeBoundingBox();
     const count = (geo.index?.count || geo.attributes.position.count) / 3;
     triangles += count * (mesh.isInstancedMesh ? mesh.count : 1);
-    if (count < 128 || mesh.isInstancedMesh || mesh.isSkinnedMesh) continue;
+    if (count < 128 || mesh.isSkinnedMesh) continue;
     if (!prepared.has(geo) && !geo.boundsTree) geo.boundsTree = new MeshBVH(geo, { indirect: true, targetLeafSize: 12 });
     prepared.add(geo);
+    // Surface paint also queries triangles inside an instanced model's local
+    // brush bounds. Share that BVH, while preserving InstancedMesh.raycast.
+    if (mesh.isInstancedMesh) continue;
     // Preserve custom raycast implementations. Normal Mesh instances use BVH only here.
     if (mesh.raycast === THREE.Mesh.prototype.raycast || mesh.raycast === acceleratedRaycast) {
       mesh.raycast = acceleratedRaycast; accelerated++;

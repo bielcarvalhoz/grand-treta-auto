@@ -39,6 +39,15 @@ e `toggleCameraMode()` alternam a vista e emitem `cameramode` em `player.events`
 `getShotOrigin(target)` escreve em `target` a posição dos olhos, independente da
 posição da câmera em terceira pessoa. `updateWeapon(gun, state)` posiciona a arma
 no mundo pelo encaixe da mão direita; retorna se a pose foi aplicada.
+`avatar.poseConfig` expõe `get`, `set`, `reset` e `export`, com posição em metros,
+rotação XYZ em graus e escala XYZ como multiplicador. `player/pose-config.js` mantém
+os encaixes por arma/perspectiva e o enquadramento dos braços por arma na primeira
+pessoa, persistidos no navegador. `ui/training-pose.js` acessa essa API pelo contexto
+`game`, sem importar internals do personagem. `game.ui.posePanel` abre/fecha o painel;
+o cartão para print e o JSON identificam arma, vista, alvo e unidades. Ajustes do
+encaixe são aplicados depois do enquadramento automático, sem serem anulados por ele.
+`player.releasePointerForUI()` solta o cursor mantendo o treino ativo para desktop.
+
 O módulo de paintball conecta o gatilho/mira ao personagem por essa API e expõe
 `setTrigger(bool)`, `setWeapon(id)`, `setAiming(bool)`, `resetInput()` e `clearEffects()`; a UI usa o
 personagem para pulo e voo. `getCameraMode()` permite distinguir a mira comum da AWP
@@ -95,6 +104,13 @@ e o movimento aditivo dos braços de espada, com amplitude reduzida e ombros
 fora do enquadramento. A guarda fica mais à direita/abaixo, com braços e arma
 reduzidos juntos nessa vista; todas as lâminas e cabos inclinam para frente.
 A terceira pessoa conserva a pose e o golpe de espada completos.
+Os socos em primeira pessoa usam a guarda frontal, os dedos do clipe de soco e
+o delta dos braços dos golpes Jab/Cross; os ombros ficam atrás do plano próximo.
+Melee e socos compensam a rotação herdada do quadril e mantêm a cabeça na orientação
+ereta de repouso em terceira pessoa. O encaixe reavalia o rig sem avançar o tempo
+quando a câmera muda entre quadros; o balanço em primeira pessoa tem 35% da amplitude
+da terceira. `player/hand-shape.js` funde um pequeno enchimento na base de cada
+polegar à geometria skinned existente, sem novos draw calls ou alterações no GLB.
 `player/hair.js` joga pontas e franja para a esquerda do personagem (+X no GLB),
 preservando a nuca e o asset original. A classe `body.playing`, vinculada a lock/unlock do jogador,
 oculta o cursor no jogo e restaura o cursor ao abrir menus/mapa.
@@ -107,12 +123,25 @@ restaura visibilidade, atmosfera, câmera e posição anteriores. A UI emite
 `modechange` ao entrar ou sair dos modos; paintball limpa gatilho, mira, projéteis
 e marcas de tinta. Durante o treino, seus raios consultam o piso e a caixa ativa.
 
-`core/dynamic-props.js` inicializa Rapier por importação assíncrona e cria duas caixas
-de madeira, uma por espaço. O mundo usa passo fixo de 1/60 s, piso de treino e uma
-malha amostrada do terreno do campo; só a caixa do espaço ativo participa. O personagem
+`core/dynamic-props.js` inicializa Rapier por importação assíncrona e cria uma caixa
+de madeira e uma de metal por espaço. O mundo usa passo fixo de 1/60 s, piso de treino e uma
+malha amostrada do terreno do campo; só as caixas do espaço ativo participam. O personagem
 compõe consultas de colisão e topo da caixa com os pisos existentes. `onImpact(hit, info)`
 aplica impulso no ponto atingido e registra dano; marcas de tinta acompanham a caixa.
 Golpes de melee e socos usam um alcance curto a partir dos olhos e nunca criam tinta.
+Consultas de piso rejeitam explicitamente o `-1` que Rapier retorna quando um raio
+não acerta a caixa. Não há alteração de geometria, altura ou visual do mapa.
+
+`gameplay/paintball/surface-paint.js` recorta triângulos de superfícies próximas com
+um pincel volumétrico. A máscara de tinta usa coordenadas 3D para atravessar quinas
+e acompanhar curvas, inclusive entre meshes estáticos e instâncias. BVHs existentes
+restringem as consultas; instâncias densas também compartilham BVH de geometria.
+São 96 buffers reutilizados de até 1536 vértices cada (3,38 MiB), sem alocar novas
+geometrias por tiro. Só o trecho usado é enviado à GPU, e projeção ocorre no impacto.
+O pequeno afastamento por face e polygon offset evitam conflito com a superfície;
+depth test preserva oclusão, depthWrite desabilitado e renderOrder cronológico fazem
+cada tinta nova cobrir as anteriores, inclusive após reciclar o pool. Marcas em corpos
+dinâmicos seguem a matriz local da caixa, sem projetar novamente durante o movimento.
 
 | Campo | O que é | Quem preenche / usa |
 |---|---|---|

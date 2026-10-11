@@ -38,6 +38,24 @@ test('neutral idle stays standing and both views reuse the same skinned arm mesh
   assert.deepEqual(avatar.meshes, meshes); assert.deepEqual(meshes.map(mesh => mesh.material), materials);
 });
 
+test('thumb web fills only the hand base without rewriting original vertices or adding meshes', async () => {
+  const original = await loadAvatarGeometry(asset), { avatar } = await fixture();
+  for (const side of ['R', 'L']) {
+    const source = original.scene.getObjectByName(`Sato_arm_hand_${side}`), mesh = avatar.meshes.find(m => m.name === source.name);
+    const count = source.geometry.attributes.position.count, added = mesh.geometry.attributes.position.count - count;
+    assert.ok(added > 0 && added < 100, 'thumb fill must remain a small local patch');
+    for (const name of ['position', 'normal', 'skinIndex', 'skinWeight']) {
+      const originalValues = source.geometry.attributes[name].array;
+      assert.deepEqual(mesh.geometry.attributes[name].array.subarray(0, originalValues.length), originalValues, `${name}: existing hand geometry was changed`);
+    }
+    const hand = mesh.skeleton.bones.findIndex(bone => bone.name === `DEF-hand${side}`);
+    for (let i = count; i < count + added; i++) {
+      assert.equal(mesh.geometry.attributes.skinIndex.getX(i), hand);
+      assert.equal(mesh.geometry.attributes.skinWeight.getX(i), 1, 'fill must follow the palm through all finger animations');
+    }
+  }
+});
+
 test('weapons follow the original hand socket through camera changes, shooting, yaw and extreme pitch', async () => {
   const { avatar, player, camera, gun } = await fixture();
   for (const mode of ['first', 'third']) for (const weapon of ['pistol', 'automatic']) {
@@ -98,7 +116,7 @@ test('locomotion keeps firearms aimed with a small rhythmic running sway in both
       maxSway = Math.max(maxSway, Math.abs(relative.y), Math.abs(relative.z));
       assert.ok(Math.abs(relative.y) < .01 && Math.abs(relative.z) < .015, `${mode}/${speed}: sway must stay below one degree`);
     }
-    if (speed > 7) assert.ok(maxSway > .007, `${mode}: running must move the aim with the gait`);
+    if (speed > 7) assert.ok(maxSway > (mode === 'first' ? .002 : .007), `${mode}: running must move the aim with the gait`);
     if (speed < 3.5) assert.ok(maxSway < .00001, `${mode}: walking must preserve stable aim`);
   }
 });
@@ -124,7 +142,7 @@ test('aiming while moving retains a subtle gait sway in both camera modes', asyn
       const angle = new THREE.Euler().setFromQuaternion(frame.invert().multiply(gun.quaternion), 'YXZ');
       maxSway = Math.max(maxSway, Math.abs(angle.y), Math.abs(angle.z));
     }
-    assert.ok(maxSway > .001 && maxSway < .004, `${mode}: aimed walk must sway gently without losing aim`);
+    assert.ok(maxSway > (mode === 'first' ? .0003 : .001) && maxSway < .004, `${mode}: aimed walk must sway gently without losing aim`);
   }
 });
 
@@ -293,4 +311,75 @@ test('supplied GLB preserves locomotion and pistol clips with bounded finite ani
     }
   }
   avatar.setPreviewAnimation(null);
+});
+
+test('input between render frames samples the same camera/hand pose as the next frame', async () => {
+  const { avatar, camera, player, gun } = await fixture();
+  player.cameraMode = 'first'; player.feet.set(10000, 0, 10000); player.eyePosition.copy(player.feet).y += 1.7;
+  for (const [weapon, kind] of [['pistol', 'firearm'], ['fists', 'unarmed'], ['axe', 'melee']]) {
+    avatar.setWeapon({ id: weapon, kind }); avatar.update(.016); avatar.updateWeapon(gun, { weapon, kind });
+    camera.rotation.set(.3, .6, 0, 'YXZ');
+    avatar.updateWeapon(gun, { weapon, kind });
+    const before = ['R', 'L'].map(side => avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3()));
+    avatar.update(0); avatar.updateWeapon(gun, { weapon, kind });
+    for (const [i, side] of ['R', 'L'].entries()) assert.ok(before[i].distanceTo(avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3())) < 1e-5, `${weapon}: stale hand pose after camera input`);
+    camera.rotation.set(0, 0, 0);
+  }
+});
+
+test('first-person punches frame both fists on portrait screens and hide the shoulder cuts', async () => {
+  const { avatar, player, camera, gun } = await fixture();
+  player.cameraMode = 'first'; camera.position.copy(player.eyePosition);
+  for (const aspect of [390 / 844, 844 / 390]) {
+    camera.aspect = aspect; camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+    avatar.setWeapon({ id: 'fists', kind: 'unarmed' }); avatar.update(.016); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+    for (const side of ['R', 'L']) {
+      const projected = avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3()).project(camera);
+      assert.ok(Math.abs(projected.x) < .85 && Math.abs(projected.y) < .85, `${aspect}/${side}: fist guard is offscreen`);
+    }
+    for (const sequence of [0, 1]) {
+      avatar.playAttack({ id: 'fists', kind: 'unarmed', interval: .42 }, { sequence });
+      for (let i = 0; i < 14; i++) {
+        avatar.update(.03); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+        for (const side of ['R', 'L']) {
+          const shoulder = camera.worldToLocal(avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3()));
+          assert.ok(shoulder.z > -camera.near, `${side}: punching exposes the shoulder cut`);
+        }
+      }
+    }
+  }
+});
+
+test('melee and unarmed heads stay upright during running and both attacks', async () => {
+  const { avatar, player, camera } = await fixture();
+  player.velocity.set(9.5, 0, 0);
+  for (const [id, kind] of [['fists', 'unarmed'], ['axe', 'melee']]) for (const pitch of [-.8, 0, .8]) {
+    camera.rotation.set(pitch, .7, 0, 'YXZ'); avatar.setWeapon({ id, kind });
+    avatar.playAttack({ id, kind, interval: .7 });
+    const expectedUp = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < 20; i++) {
+      avatar.update(.04);
+      const headUp = expectedUp.clone().applyQuaternion(avatar.bones['DEF-head'].getWorldQuaternion(new THREE.Quaternion()));
+      assert.ok(headUp.dot(expectedUp) > .995, `${id}: head looks down with the attack/hips`);
+    }
+  }
+});
+
+test('debug socket transforms stay independent of camera framing and do not accumulate', async () => {
+  const { avatar, player, camera, gun } = await fixture();
+  player.cameraMode = 'first'; camera.position.copy(player.eyePosition);
+  avatar.update(0); avatar.updateWeapon(gun); const original = gun.position.clone(), palm = avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3());
+  avatar.poseConfig.set('pistol', 'first', 'weapon', 'position', 'x', .1);
+  avatar.poseConfig.set('pistol', 'first', 'weapon', 'rotation', 'z', 15);
+  avatar.poseConfig.set('pistol', 'first', 'weapon', 'scale', 'y', 1.2);
+  avatar.updateWeapon(gun); const edited = gun.position.clone();
+  assert.ok(edited.distanceTo(original) > .05, 'first-person automatic framing must not cancel the socket edit');
+  assert.ok(avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3()).distanceTo(palm) < 1e-5, 'socket edits must leave the hands in their camera framing');
+  avatar.updateWeapon(gun); assert.ok(gun.position.distanceTo(edited) < 1e-5);
+  assert.ok(avatar.weaponDiagnostics.gripError < .003);
+  player.cameraMode = 'third'; avatar.update(0); avatar.updateWeapon(gun);
+  assert.equal(avatar.poseConfig.get('pistol', 'third').position.x, 0);
+  avatar.poseConfig.set('pistol', 'first', 'arms', 'position', 'x', .05);
+  player.cameraMode = 'first'; avatar.update(0); avatar.updateWeapon(gun); const armEdited = gun.position.clone();
+  avatar.updateWeapon(gun); assert.ok(gun.position.distanceTo(armEdited) < 1e-5);
 });
