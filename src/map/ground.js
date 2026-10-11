@@ -83,6 +83,7 @@ export function paintGround(world, bounds, renderer, maxPx = 4096) {
       g.fillStyle = a.color || AREA_STYLE[kind];
       pathRings(g, a.rings, s, P);
       g.fill('evenodd');
+      if (a.plain && !a.lanes) continue; // área com acabamento próprio (pintura feita por quem a criou)
       if (kind === 'tennis') {
         // quadra de tênis: piso verde com faixa externa vermelha
         g.strokeStyle = '#b8573a';

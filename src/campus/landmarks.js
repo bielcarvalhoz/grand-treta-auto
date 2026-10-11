@@ -3,14 +3,15 @@ import { mulberry32 } from '../shared/rng.js';
 import { exteriorEdges } from './reference.js';
 import { createKit, toWorld } from './landmark-kit.js';
 import { planStairway, resolveStairway, stairwaySamples, buildStairway } from './stairway.js';
+import { planPortaria, buildPortaria } from './portaria.js';
 import { planLocomotive, settleLocomotive, buildLocomotive } from './locomotive.js';
-import { WALK, prepareAlley, nearestStreet, terraceSamples, planAlleyStair, alleySamples, backDoorFrame, buildPrataAccess } from './prata-access.js';
+import { WALK, prepareAlley, nearestStreet, terraceSamples, planAlleyStair, alleySamples, backDoorFrame, spanAt, buildPrataAccess } from './prata-access.js';
 
 // Marcos levantados com os vídeos e fotos de quem trabalha no campus (10/2026) e com a planta
 // oficial: escadaria da mata, beco do Balança, entradas do Prata e a locomotiva 801.
 // Fluxo: prepareLandmarks (planta) -> landmarkPlatformLevels + gradeLandmarks (relevo) -> buildLandmarks.
 
-const SIDEWALK = 2.5, MAX_RISER = .178, FLOOR = 3.6;
+const SIDEWALK = 2.5, FLOOR = 3.6;
 
 /** Depois de ler as feições: ajusta vias, abre o beco e marca os prédios com acesso de referência. */
 export function prepareLandmarks(C, world) {
@@ -18,12 +19,21 @@ export function prepareLandmarks(C, world) {
   // que são os nós compartilhados com as outras vias, e troca o miolo.
   for (const fix of (C.paths || []).filter((p) => p.kind === 'roadFix')) {
     const road = world?.roads.find((r) => r.id === fix.way);
-    if (road && road.pts.length >= 2) road.pts = [road.pts[0], ...fix.pts, road.pts.at(-1)];
+    if (!road || road.pts.length < 2) continue;
+    if (fix.insert) {
+      // curva acrescentada no trecho mais próximo (o resto do eixo fica como está)
+      let at = 1, best = Infinity;
+      for (let i = 1; i < road.pts.length; i++) { const [ax, az] = road.pts[i - 1], [bx, bz] = road.pts[i], m = fix.pts[0], l2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1, t = Math.max(0, Math.min(1, ((m[0] - ax) * (bx - ax) + (m[1] - az) * (bz - az)) / l2)), d = Math.hypot(m[0] - ax - (bx - ax) * t, m[1] - az - (bz - az) * t); if (d < best) { best = d; at = i; } }
+      road.pts.splice(at, 0, ...fix.pts);
+    } else road.pts = [road.pts[0], ...fix.pts, road.pts.at(-1)];
   }
   const marks = C.landmarks || [];
   const alley = marks.find((m) => m.type === 'beco');
   if (alley) C.alley = prepareAlley(C, alley);
   for (const m of marks) if (m.type === 'entrada') { const b = C.buildings.find((q) => q.planId === m.building); if (b) b.referenceAccess = true; }
+  // portaria dupla: uma cobertura só para as duas pistas (os cruzamentos de muro não ganham marquise própria)
+  const gate = marks.find((m) => m.type === 'portaria');
+  if (gate) { C.portaria = planPortaria(gate, (x, z) => pointInPolygon(x, z, C.quarter)); for (const g of C.gates || []) if (g.num === gate.gate && g.type === 'portaria') g.combined = true; }
   const locomotive = marks.find((m) => m.type === 'locomotiva');
   if (locomotive) C.locomotive = planLocomotive(locomotive);
 }
@@ -60,14 +70,7 @@ export function landmarkPlatformLevels(C, world, terrain) {
 
 /** maior v (lado da rua) onde a reta u = const corta o prédio do beco ou o bloco de arrimo */
 function streetSideAt(A, u) {
-  let best = -Infinity;
-  for (const ring of [...A.pieces.map((piece) => piece.rings[0]), A.block]) {
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i], b = ring[(i + 1) % ring.length], ua = A.U(a), ub = A.U(b);
-      if ((ua - u) * (ub - u) > 0 || ua === ub) continue;
-      best = Math.max(best, A.V(a) + (A.V(b) - A.V(a)) * (u - ua) / (ub - ua));
-    }
-  }
+  const best = spanAt(A, u, [...A.pieces.map((piece) => piece.rings[0]), A.block])[1];
   return Number.isFinite(best) ? best : A.v1;
 }
 
@@ -108,14 +111,18 @@ export function gradeLandmarks(world, terrain, C) {
   if (A) {
     const exit = sidewalkEdge(A.at(A.uA, A.v1), [A.nx, A.nz]);
     if (exit) {
-      const terrace = terraceSamples(roads, terrain, A.at(A.uMin, 0), [A.ux, A.uz], [A.nx, A.nz], A.uMax - A.uMin, { depthAt: (s) => streetSideAt(A, A.uMin + s) });
-      report.terrace = terrain.gradeProfile(terrace.samples, { radius: 1.2, band: 4, clearance: .05, minClearance: .02, protect: (x, z) => bed(x, z) || inBuilding(x, z, A.pieces) });
+      // O relevo sobe para o nível da rua só nos 5 m de trás da planta: da linha para o lado do
+      // estacionamento ele fica no nível do térreo (a fachada da frente aparece inteira).
+      const inset = 5, front = (x, z) => A.V([x, z]) < streetSideAt(A, A.U([x, z])) - inset - .5;
+      const terrace = terraceSamples(roads, terrain, A.at(A.uMin, 0), [A.ux, A.uz], [A.nx, A.nz], A.uMax - A.uMin, { inset, depthAt: (s) => streetSideAt(A, A.uMin + s) });
+      report.terrace = terrain.gradeProfile(terrace.samples, { radius: 1.2, band: 4, clearance: .05, minClearance: .02, protect: (x, z) => bed(x, z) || inBuilding(x, z, A.pieces) || front(x, z) });
       report.beds = restoreBeds([...A.pieces.map((piece) => piece.rings[0]), A.block]);
       A.stair = planAlleyStair(A, A.lowLevel + .1, exit.y, exit.t);
       report.alley = terrain.gradeProfile(alleySamples(A, A.stair), { radius: 1, band: 2.5, clearance: .3, minClearance: .1, protect: bed });
       for (const piece of A.pieces) {
         const platform = terrain.platformFor(piece)?.height ?? A.lowLevel;
-        piece.height = Math.max(4.5, Math.min(9, exit.y + .6 - platform)); piece.levels = 2;
+        // a laje é estacionamento: fica rente à calçada da rua de trás
+        piece.height = Math.max(3.5, Math.min(11, exit.y + .03 - platform)); piece.levels = 2; piece.deckLevel = platform + piece.height;
       }
     }
   }
@@ -152,8 +159,14 @@ export function gradeLandmarks(world, terrain, C) {
     };
     const top = snap(points[0], 14), end = walk ? snap(points.at(-1), 9) : null;
     points[0] = top.p; if (end) points[points.length - 1] = end.p;
-    const plan = planStairway(points, { width: path.width ?? 3, rampWidth: walk?.width ?? 2.2, plaza: path.plaza ?? -1, plazaRadius: path.plazaRadius ?? 2.7, ramps: walk ? walk.pts.length - 1 : 0 });
-    const foot = plan.flights.at(-1).b, riser = Math.max(.15, Math.min(MAX_RISER, (top.y - terrain.heightAt(...foot)) / plan.risers));
+    const options = { width: path.width ?? 3, rampWidth: walk?.width ?? 2.2, plaza: path.plaza ?? -1, plazaRadius: path.plazaRadius ?? 2.7, ramps: walk ? walk.pts.length - 1 : 0 };
+    let plan = planStairway(points, options);
+    // Degraus suficientes para o desnível real do barranco: espelho perto de 18 cm e piso entre
+    // 25 e 30 cm (o eixo vem da planta; o número de degraus, do relevo).
+    const foot = plan.flights.at(-1).b, drop = top.y - terrain.heightAt(...foot) - .05, run = plan.flights.reduce((sum, f) => sum + f.run, 0);
+    const tread = Math.max(.25, Math.min(.3, run / Math.ceil(drop / .18)));
+    if (Math.abs(tread - plan.flights[0].tread) > .004) plan = planStairway(points, { ...options, tread });
+    const riser = Math.max(.14, Math.min(.2, drop / plan.risers));
     const S = resolveStairway(plan, { topY: top.y, riser, endY: end ? end.y : top.y - plan.risers * riser });
     S.id = path.id; S.name = path.name; S.sawtoothFrom = path.sawtoothFrom ?? Infinity;
     S.grading = terrain.gradeProfile(stairwaySamples(S), { radius: 3.5, band: 9, clearance: .35, minClearance: .12, protect: (x, z) => bed(x, z) || inBuilding(x, z) });
@@ -199,6 +212,7 @@ export function buildLandmarks(C, { renderer, terrain, world, roads }) {
   }
   const roadClearance = (x, z) => { const s = nearestStreet(world.roads, x, z, 20); return s ? s.d - s.road.w / 2 : Infinity; };
   if (C.locomotive) plan.locomotive = { ...C.locomotive, ...take(buildLocomotive(kit, C.locomotive, { ground, clearance: roadClearance })) };
+  if (C.portaria) plan.portaria = { ...C.portaria, ...take(buildPortaria(kit, C.portaria, { ground, clearance: roadClearance })) };
   const access = take(buildPrataAccess(kit, C, { ground, roads: world.roads, surfaceAt, sidewalkAt }));
   plan.access = access.notes;
 
@@ -218,6 +232,9 @@ export function buildLandmarks(C, { renderer, terrain, world, roads }) {
     for (const surface of index.query(x, z)) if (surface.y <= maxY && surface.y > height && pointInPolygon(x, z, surface.rings)) height = surface.y;
     return height;
   };
+  // a mata não invade pisos (o zigue-zague traz um lance para perto do recuo lateral de outro)
+  const onFloor = (x, z) => [[0, 0], [1.4, 0], [-1.4, 0], [0, 1.4], [0, -1.4]].some(([dx, dz]) => Number.isFinite(surfaceHeightAt(x + dx, z + dz)));
+  for (let i = trees.length - 1; i >= 0; i--) if (onFloor(trees[i].x, trees[i].z)) trees.splice(i, 1);
   const stats = { ...root.userData.stats, stairways: plan.stairways.length, risers: plan.stairways.reduce((sum, S) => sum + S.risers, 0), locomotive: !!C.locomotive, alley: !!C.alley?.stair, surfaces: surfaces.length, solids: solids.length, groveTrees: trees.length };
   root.userData.landmarks = stats;
   return { root, plan, stats, solids, surfaces, exclusions, entrances, trees, surfaceHeightAt };

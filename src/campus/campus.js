@@ -12,6 +12,7 @@ import { campusWallGeometry } from './wall.js';
 import { buildCampusFoundations } from './access.js';
 import { buildCampusAmenities } from './amenities.js';
 import { prepareLandmarks, buildLandmarks } from './landmarks.js';
+import { prepareLeisure, buildLeisure } from './leisure.js';
 import { createRegionTest } from '../shared/regions.js';
 import { halveTrees } from '../shared/tree-density.js';
 
@@ -170,13 +171,19 @@ export function prepareCampus(geo, world, proj) {
       else if (p.kind === 'court') world.areas.push({ id: 'cdd/quadra', tags: {}, kind: 'court', rings });
       else if (p.kind === 'parking') C.parkings.push({ ...p, rings });
       else if (p.kind === 'monkeyPark') C.monkeyPark = rings;
+      else if (p.kind === 'plateau') (C.plateaus ||= []).push({ ...p, rings });
     } else if (g.type === 'Point') {
       const [x, z] = proj.toLocal(g.coordinates[0], g.coordinates[1]);
       if (p.kind === 'gate') C.gates.push({ ...p, x, z });
+      else if (p.kind === 'leisure') C.leisureLayout = p.layout;
       else if (p.kind === 'landmark') (C.landmarks ||= []).push({ ...p, x, z });
       else C.points.push({ ...p, x, z });
     } else if (g.type === 'LineString') {
       (C.paths ||= []).push({ ...p, pts: g.coordinates.map(([lon, lat]) => proj.toLocal(lon, lat)) });
+    } else if (g.type === 'MultiPoint' && p.kind === 'groundControl') {
+      // altitudes de chão [lon, lat, altitude] para corrigir o relevo de satélite
+      C.controlOffset = p.offset || 0;
+      C.groundControl = g.coordinates.map(([lon, lat, altitude]) => [...proj.toLocal(lon, lat), altitude + (p.offset || 0)]);
     } else if (g.type === 'MultiPoint' && p.kind === 'trees') {
       C.treePts = g.coordinates.map(([lon, lat]) => proj.toLocal(lon, lat));
     }
@@ -185,13 +192,15 @@ export function prepareCampus(geo, world, proj) {
   // -- marcos de referência (beco que divide o Balança, acessos, locomotiva)
   prepareLandmarks(C, world);
 
+  // -- área de convivência levantada (campo, pista, quadras, piscinas, lago): substitui OSM/planta
+  if (C.leisureLayout) prepareLeisure(C, world, proj, C.leisureLayout);
   // -- pista de atletismo em volta do campo de futebol
-  if (pitch) {
+  if (pitch && !C.track) {
     C.track = makeTrack(pitch.rings[0]);
     world.areas.push({ id: 'cdd/pista', tags: {}, kind: 'track', rings: [C.track.outer], lanes: C.track.lanes });
   }
   // -- deck das piscinas (piso bege em volta)
-  if (pools.length) {
+  if (pools.length && !C.leisure) {
     const hull = convexHull(pools.flatMap((p) => p.rings[0]));
     world.areas.push({ id: 'cdd/deck', tags: {}, kind: 'deck', rings: [bufferConvex(hull, 5)] });
   }
@@ -327,7 +336,7 @@ export function prepareCampus(geo, world, proj) {
   }
 
   // -- torres de iluminação da pista
-  if (C.track) {
+  if (C.track && !C.track.surveyed) {
     const T = C.track;
     for (const su of [-1, 1]) for (const sv of [-1, 1]) {
       const u = su * T.straight * 0.8, v = sv * (T.rOut + 3.5);
@@ -692,7 +701,7 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
       id: b.planId || b.name, rings: b.rings, height: b.height, style, floorH: b.height / (b.levels || 2),
       groundY: b.groundY,
       wall: facadeProfile(b).color, roof: b.roof, roofShape: roofShapeFor(b), noRoof: b.roofShape === 'tent',
-      noParapet: b.roofShape === 'ribbed' || b.roofShape === 'green' || b.style === 'pavilion',
+      noParapet: b.roofShape === 'ribbed' || b.roofShape === 'green' || b.style === 'pavilion' || b.deckRoof,
     });
     if (!info) continue;
     const A = principalAxis(outer);
@@ -882,7 +891,7 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
     const sx = vx * side, sz = vz * side;
     const yaw = yawOf(T.ux, T.uz);
     const len = T.straight * 2 - 6;
-    for (let k = 0; k < 10; k++) {
+    for (let k = 0; k < 10 && !T.surveyed; k++) {
       const off = T.rOut + 1.5 + k * 1.3 + 0.65;
       const px = T.cx + sx * off, pz = T.cz + sz * off;
       const gy = H(px, pz), h = 0.6 + k * 0.62;
@@ -890,7 +899,7 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
     }
     const c0 = T.rOut + 1.5, c1 = T.rOut + 1.5 + 13;
     const foot = [[-1, c0], [1, c0], [1, c1], [-1, c1]].map(([s, o]) => [T.cx + T.ux * s * len / 2 + sx * o, T.cz + T.uz * s * len / 2 + sz * o]);
-    builder.addSolid([foot], H(T.cx + sx * c1, T.cz + sz * c1) + 6, 'campus');
+    if (!T.surveyed) builder.addSolid([foot], H(T.cx + sx * c1, T.cz + sz * c1) + 6, 'campus');
     for (const f of C.floodlights) {
       const gy = H(f.x, f.z);
       cyl('#8f959a', f.x, gy, f.z, 0.25, 0.4, 20, 8);
@@ -939,7 +948,9 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
       continue;
     }
     // portaria de veículos: marquise com pórticos vermelhos, placa, guarita e cancelas
+    // (g.combined: a cobertura é única para as duas pistas e vem de portaria.js; aqui só as cancelas)
     const mspan = Math.max(span + 2, w + 4), my = gy + 5.4;
+    if (!g.combined) {
     box('#ffffff', px + tx * 2, my, pz + tz * 2, mspan, 0.55, 8, across);
     for (const a of [-1, 1]) {
       box('#eeeee9', px + tx * (2 + a * 4.2), my - 0.45, pz + tz * (2 + a * 4.2), mspan, 1.1, 0.35, across);
@@ -969,6 +980,7 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
         if (info) { box(RED, bxp, info.gMin + 1.1, bzp, 4.4, 0.35, 3.2, yawOf(tx, tz)); for (const [x, z] of ring) outline.push(x, info.gMin, z, x, info.top + 0.5, z); }
         placed = true;
       }
+    }
     }
     // cancelas (uma por sentido), um pouco para dentro — sobem quando o jogador chega perto
     for (const s of [1, -1]) {
@@ -1010,7 +1022,9 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
   root.add(landmarks.root);
   for(const solid of landmarks.solids)builder.addSolid(solid.rings,solid.top,null);
   details.entrances.push(...landmarks.entrances);
-  const exclusions=[...details.exclusions,...foundations.exclusions,...amenities.exclusions,...landmarks.exclusions];
+  const leisure=buildLeisure(C,{renderer,terrain});
+  if(leisure){root.add(leisure.root);for(const solid of leisure.solids)builder.addSolid(solid.rings,solid.top,null);}
+  const exclusions=[...details.exclusions,...foundations.exclusions,...amenities.exclusions,...landmarks.exclusions,...(leisure?.exclusions||[])];
   C.detailOccupied=createRegionTest(exclusions);
   const allowedTrees=C.trees.filter(t=>!C.detailOccupied(t.x,t.z));
   C.treeSourceCount=allowedTrees.length;
@@ -1121,8 +1135,8 @@ export function buildCampus(C, { scene, renderer, terrain, world, roads, quality
     flags.forEach((f) => { f.rotation.y = f.userData.base + Math.sin(t * 2.2 + f.userData.ph) * 0.25; });
   }
 
-  return { root, builder, sprites, update, spawnPoints, details, foundations, amenities, landmarks,
-    surfaceHeightAt:(x,z,maxY)=>Math.max(details.surfaceHeightAt(x,z,maxY),foundations.surfaceHeightAt(x,z,maxY),amenities.surfaceHeightAt(x,z,maxY),landmarks.surfaceHeightAt(x,z,maxY)),
+  return { root, builder, sprites, update, spawnPoints, details, foundations, amenities, landmarks, leisure,
+    surfaceHeightAt:(x,z,maxY)=>Math.max(details.surfaceHeightAt(x,z,maxY),foundations.surfaceHeightAt(x,z,maxY),amenities.surfaceHeightAt(x,z,maxY),landmarks.surfaceHeightAt(x,z,maxY),leisure?leisure.surfaceHeightAt(x,z,maxY):-Infinity),
     count: C.buildings.length, cars: C.cars.length, trees: C.trees.length };
 
   // ================================================================ peças
