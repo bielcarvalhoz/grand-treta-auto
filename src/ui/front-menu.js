@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings, createAudio } from '../core/index.js';
+import { loadSettings, saveSettings, createAudio, IS_TOUCH } from '../core/index.js';
 
 import { startIntro } from './intro.js';
 
@@ -32,9 +32,17 @@ export const loading = {
 };
 
 /** Bind the menu before any network or 3D construction begins. */
-export function createFrontMenu() {
+export function createFrontMenu({ trainingOnly = false } = {}) {
   failed = false; progress = 0;
   const intro = startIntro(), endIntro = intro.finish;
+  if (trainingOnly) {
+    endIntro();
+    $('play').hidden = $('tour').hidden = true;
+    $('places-list').hidden = true;
+    const placesTitle = document.querySelector('.places-title'); if (placesTitle) placesTitle.hidden = true;
+    $('training').querySelector('b').textContent = 'Retomar treino com debug';
+    $('loading').querySelector('small').textContent = 'O treino com debug abre quando o carregamento terminar.';
+  }
   const settings = loadSettings();
   const audio = createAudio(settings);
   $('graphics').value = settings.quality; $('surroundings').value = settings.surroundings;
@@ -92,6 +100,7 @@ export function createFrontMenu() {
     game.ui.startMode(mode, touch);
   };
   for (const [id, mode] of [['play', 'campaign'], ['training', 'training'], ['tour', 'tour']]) {
+    if (trainingOnly && mode !== 'training') continue;
     let pointerType = '';
     $(id).addEventListener('pointerdown', e => { pointerType = e.pointerType; });
     // Commit navigation on the click, after the touch gesture has completed.
@@ -106,7 +115,12 @@ export function createFrontMenu() {
     settings, audio, introFinished: intro.finished,
     ready(context) {
       game = context; loading.complete();
-      for (const button of modeButtons) { button.disabled = false; button.removeAttribute('aria-describedby'); }
+      if (trainingOnly) {
+        $('loading-text').textContent = 'Treino com debug pronto.';
+        $('loading').querySelector('small').textContent = 'Retome o treino ou ajuste as configurações.';
+      }
+      for (const button of modeButtons) { button.disabled = trainingOnly && button !== $('training'); button.removeAttribute('aria-describedby'); }
+      if (trainingOnly) selectMode('training', IS_TOUCH);
     },
   };
 }

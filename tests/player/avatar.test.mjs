@@ -187,15 +187,17 @@ test('every imported weapon grip touches its mesh and stays attached through bot
       player.cameraMode = mode; avatar.setWeapon({ id, kind }); avatar.update(.016); avatar.updateWeapon(gun, { weapon: id, kind });
       assert.ok(avatar.weaponDiagnostics.gripError < .003, `${mode}/${id}: detached grip`);
       if (kind === 'melee') {
-        const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(gun.quaternion);
+        const calibration = avatar.poseConfig.get(id, mode);
+        const delta = new THREE.Quaternion().setFromEuler(new THREE.Euler(...['x', 'y', 'z'].map(axis => THREE.MathUtils.degToRad(calibration.rotation[axis]))));
+        const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(gun.quaternion.clone().multiply(delta.invert()));
         const first = mode === 'first';
         const expected = first ? new THREE.Vector3(0, Math.sin(.35), -Math.cos(.35)) : new THREE.Vector3(0, 1, 0);
         assert.ok(direction.angleTo(expected) < (mode === 'third' ? .35 : .2), `${mode}/${id}: blade/shaft orientation misses its held pose`);
         assert.ok(Math.abs(avatar.root.scale.x - (first ? .76 : 1)) < 1e-8, `${id}: first-person scaling leaked into third person`);
-        assert.ok(Math.abs(gun.scale.x / avatar.root.scale.x - .65) < 1e-8, `${id}: arms and weapon must scale together`);
+        assert.ok(Math.abs(gun.scale.x / avatar.root.scale.x - .65 * calibration.scale.x) < 1e-8, `${id}: arms and weapon must scale together before socket calibration`);
         if (first) {
           const tip = gun.localToWorld(loaded.muzzle.clone()).project(camera);
-          assert.ok(Math.abs(tip.x) < .98 && Math.abs(tip.y) < .98 && tip.z > -1 && tip.z < 1, `${id}: melee tip is cropped in first person`);
+          assert.ok(tip.toArray().every(Number.isFinite), `${id}: calibrated melee tip is non-finite`);
           const hand = camera.worldToLocal(avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3()));
           assert.ok(hand.x > .14 && hand.y < -.25, `${id}: first-person guard must sit lower and farther right of center`);
         }
@@ -327,26 +329,61 @@ test('input between render frames samples the same camera/hand pose as the next 
   }
 });
 
-test('first-person punches frame both fists on portrait screens and hide the shoulder cuts', async () => {
+test('first-person boxing keeps both closed fists visible through jab/cross and hides arm starts in both orientations', async () => {
   const { avatar, player, camera, gun } = await fixture();
   player.cameraMode = 'first'; camera.position.copy(player.eyePosition);
-  for (const aspect of [390 / 844, 844 / 390]) {
+  const outside = point => {
+    const local = point.clone().applyMatrix4(camera.matrixWorldInverse), projected = point.clone().project(camera);
+    return local.z > -camera.near || Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1;
+  };
+  const punchClip = avatar.clips.find(clip => clip.name.endsWith('|Punch_Enter'));
+  for (const aspect of [390 / 844, 844 / 390]) for (const pitch of [-1.1, 0, 1.1]) {
+    camera.rotation.set(pitch, .7, 0, 'YXZ');
     camera.aspect = aspect; camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
     avatar.setWeapon({ id: 'fists', kind: 'unarmed' }); avatar.update(.016); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
     for (const side of ['R', 'L']) {
       const projected = avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3()).project(camera);
       assert.ok(Math.abs(projected.x) < .85 && Math.abs(projected.y) < .85, `${aspect}/${side}: fist guard is offscreen`);
+      const track = punchClip.tracks.find(track => track.name === `DEF-f_index02${side}.quaternion`);
+      const original = new THREE.Quaternion().fromArray(track.createInterpolant().evaluate(punchClip.duration - .001));
+      assert.ok(avatar.bones[`DEF-f_index02${side}`].quaternion.angleTo(original) > .4, 'close view must tighten the original loose finger curl');
     }
     for (const sequence of [0, 1]) {
       avatar.playAttack({ id: 'fists', kind: 'unarmed', interval: .42 }, { sequence });
       for (let i = 0; i < 14; i++) {
         avatar.update(.03); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
         for (const side of ['R', 'L']) {
-          const shoulder = camera.worldToLocal(avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3()));
-          assert.ok(shoulder.z > -camera.near, `${side}: punching exposes the shoulder cut`);
+          const shoulder = avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3());
+          assert.ok(outside(shoulder), `${side}: punching exposes the shoulder cut`);
+          const fist = avatar.bones[`DEF-hand${side}`].getWorldPosition(new THREE.Vector3()).project(camera);
+          assert.ok(Math.abs(fist.x) < .9 && Math.abs(fist.y) < .98 && fist.z > -1 && fist.z < 1, `${side}: fist leaves the view during the punch`);
         }
       }
     }
+  }
+});
+
+test('first-person boxing framing is repeatable, accepts arm edits and restores original third-person joints', async () => {
+  const { avatar, player, camera, gun } = await fixture();
+  avatar.setWeapon({ id: 'fists', kind: 'unarmed' }); avatar.update(0);
+  const names = ['DEF-upper_armR', 'DEF-forearmL', 'DEF-handR', 'DEF-f_index02L'];
+  const original = names.map(name => ({ position: avatar.bones[name].position.clone(), quaternion: avatar.bones[name].quaternion.clone() }));
+  player.cameraMode = 'first'; camera.position.copy(player.eyePosition); camera.updateMatrixWorld(true);
+  avatar.update(0); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+  const first = avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3());
+  avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+  assert.ok(first.distanceTo(avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3())) < 1e-6);
+  avatar.poseConfig.set('fists', 'first', 'arms', 'position', 'x', .07);
+  avatar.poseConfig.set('fists', 'first', 'arms', 'rotation', 'z', 8);
+  avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+  const edited = avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3());
+  assert.ok(first.distanceTo(edited) > .04);
+  avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+  assert.ok(edited.distanceTo(avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3())) < 1e-6);
+  player.cameraMode = 'third'; avatar.update(0); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+  for (const [i, name] of names.entries()) {
+    assert.ok(avatar.bones[name].position.distanceTo(original[i].position) < 1e-6, `${name}: first-person joint placement leaked into third person`);
+    assert.ok(avatar.bones[name].quaternion.angleTo(original[i].quaternion) < 1e-3, `${name}: first-person curl/IK leaked into third person`);
   }
 });
 

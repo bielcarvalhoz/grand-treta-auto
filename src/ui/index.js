@@ -26,7 +26,7 @@ export function createUI(game) {
   let touchSession = IS_TOUCH;
   const weaponWheel = createWeaponWheel(game);
   const sniperScope = createSniperScope(game);
-  const posePanel = createTrainingPosePanel(game);
+  const posePanel = game.debug.trainingOnly ? createTrainingPosePanel(game) : null;
 
   const toast = msg => {
     const el = $('toast'); el.textContent = msg; el.classList.add('show');
@@ -55,6 +55,7 @@ export function createUI(game) {
   function startCampaign(touch = touchSession) { startWalking('campaign', touch); }
 
   function startMode(mode, touch = IS_TOUCH) {
+    if (game.debug.trainingOnly) mode = 'training';
     if (mode === 'campaign' || mode === 'training') { startWalking(mode, touch); return; }
     game.audio?.setMenu(false);
     game.mode = 'tour'; player.stop(); training.stop(); tour.start(); touchSession = touch;
