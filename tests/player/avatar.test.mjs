@@ -363,6 +363,48 @@ test('first-person boxing keeps both closed fists visible through jab/cross and 
   }
 });
 
+test('first-person jab and cross preserve the third-person trajectories, elbow extension and recovery timing', async () => {
+  for (const aspect of [390 / 844, 844 / 390]) {
+    const views = await Promise.all([fixture(), fixture()]);
+    const weapon = { id: 'fists', kind: 'unarmed', interval: .42 };
+    function sample({ avatar }) {
+      return Object.fromEntries(['L', 'R'].map(side => {
+        const point = name => avatar.root.worldToLocal(avatar.bones[`DEF-${name}${side}`].getWorldPosition(new THREE.Vector3()));
+        const shoulder = point('upper_arm'), elbow = point('forearm'), wrist = point('hand');
+        return [side, { wrist, bend: elbow.clone().sub(shoulder).angleTo(wrist.clone().sub(elbow)) }];
+      }));
+    }
+    views.forEach(({ avatar, player, camera, gun }, i) => {
+      player.cameraMode = i ? 'first' : 'third'; camera.aspect = aspect;
+      camera.position.copy(player.eyePosition); camera.rotation.set(.6, .7, 0, 'YXZ');
+      camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+      avatar.setWeapon(weapon); avatar.update(0); avatar.updateWeapon(gun, { weapon: 'fists', kind: 'unarmed' });
+    });
+    for (const sequence of [0, 1]) {
+      const samples = views.map(view => [sample(view)]);
+      views.forEach(({ avatar }) => avatar.playAttack(weapon, { sequence }));
+      for (let frame = 0; frame < 28; frame++) views.forEach((view, i) => {
+        view.avatar.update(.015); view.avatar.updateWeapon(view.gun, { weapon: 'fists', kind: 'unarmed' });
+        samples[i].push(sample(view));
+      });
+      for (const side of ['L', 'R']) for (const axis of ['x', 'y', 'z']) {
+        const deltas = samples.map(frames => frames.map(frame => frame[side].wrist[axis] - frames[0][side].wrist[axis]));
+        const peak = deltas[0].reduce((best, value, i, values) => Math.abs(value) > Math.abs(values[best]) ? i : best, 0);
+        const scale = deltas[1][peak] / deltas[0][peak];
+        assert.ok(scale > .2 && scale <= 1, `${sequence}/${side}/${axis}: authored motion lost or reversed`);
+        deltas[0].forEach((value, frame) => assert.ok(Math.abs(deltas[1][frame] - value * scale) < 1e-5,
+          `${sequence}/${side}/${axis}/${frame}: first-person framing clips or changes the punch trajectory`));
+      }
+      const strikingSide = sequence ? 'R' : 'L';
+      const bends = samples.map(frames => frames.map(frame => frame[strikingSide].bend));
+      const peaks = bends.map(values => values.indexOf(Math.min(...values)));
+      assert.ok(bends[1][0] - Math.min(...bends[1]) > THREE.MathUtils.degToRad(35), 'striking elbow must unfold, rather than slide with a locked bend');
+      assert.ok(Math.abs(peaks[0] - peaks[1]) <= 2, 'first-person impact must follow the authored extension timing');
+      assert.ok(Math.abs(bends[1].at(-1) - bends[1][0]) < .02, 'striking elbow must return to its guard');
+    }
+  }
+});
+
 test('first-person boxing framing is repeatable, accepts arm edits and restores original third-person joints', async () => {
   const { avatar, player, camera, gun } = await fixture();
   avatar.setWeapon({ id: 'fists', kind: 'unarmed' }); avatar.update(0);
