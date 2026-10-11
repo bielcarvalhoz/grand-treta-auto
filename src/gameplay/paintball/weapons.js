@@ -3,7 +3,7 @@
 const firearm = (id, label, damage, interval, automatic, extra = {}) => Object.freeze({
   id, label, icon: id, kind: 'firearm', damage, interval, automatic,
   pellets: 1, spread: 0, range: 180, speed: 80, impulse: damage * .09,
-  aimFov: 45, ...extra,
+  aimFov: 45, recoilStrength: 1, recoilDecay: 16, ...extra,
 });
 const melee = (id, label, damage, interval, range, extra = {}) => Object.freeze({
   id, label, icon: id.startsWith('knife') ? 'knife' : id,
@@ -14,7 +14,7 @@ export const WEAPONS = Object.freeze([
   firearm('pistol', 'Glock-18', 30, .15, false, { speed: 34, csWeapon: 'weapon_glock', spread: .002 }),
   firearm('automatic', 'M4A4', 33, .09, true, { speed: 90, csWeapon: 'weapon_m4a1', spread: .0006 }),
   firearm('revolver', 'R8 Revolver', 86, .5, true, { csWeapon: 'weapon_revolver', spread: .00052, windup: .2 }),
-  firearm('shotgun', 'Nova', 26, .88, false, { csWeapon: 'weapon_nova', pellets: 9, spread: .04, speed: 70, range: 70, impulse: 2.4 }),
+  firearm('shotgun', 'Nova', 26, .88, false, { csWeapon: 'weapon_nova', pellets: 9, spread: .04, speed: 70, range: 70, impulse: 2.4, recoilStrength: 2.8, recoilDecay: 10 }),
   firearm('sniper', 'AWP', 115, 1.455, false, { csWeapon: 'weapon_awp', spread: .0002, hipSpread: .0808, speed: 150, range: 300, aimFov: 40 }),
   firearm('smg', 'MP5-SD', 28, .08, true, { csWeapon: 'weapon_mp5sd', spread: .0006, speed: 80 }),
   melee('knife', 'Faca', 40, .65, 1.65),

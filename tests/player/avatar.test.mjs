@@ -170,12 +170,16 @@ test('every imported weapon grip touches its mesh and stays attached through bot
       assert.ok(avatar.weaponDiagnostics.gripError < .003, `${mode}/${id}: detached grip`);
       if (kind === 'melee') {
         const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(gun.quaternion);
-        const longFirst = mode === 'first' && ['axe', 'bat', 'bat-barbed'].includes(id);
-        const expected = longFirst ? new THREE.Vector3(0, Math.sin(1), -Math.cos(1)) : new THREE.Vector3(0, 1, 0);
+        const first = mode === 'first';
+        const expected = first ? new THREE.Vector3(0, Math.sin(.35), -Math.cos(.35)) : new THREE.Vector3(0, 1, 0);
         assert.ok(direction.angleTo(expected) < (mode === 'third' ? .35 : .2), `${mode}/${id}: blade/shaft orientation misses its held pose`);
-        if (longFirst) {
+        assert.ok(Math.abs(avatar.root.scale.x - (first ? .76 : 1)) < 1e-8, `${id}: first-person scaling leaked into third person`);
+        assert.ok(Math.abs(gun.scale.x / avatar.root.scale.x - .65) < 1e-8, `${id}: arms and weapon must scale together`);
+        if (first) {
           const tip = gun.localToWorld(loaded.muzzle.clone()).project(camera);
-          assert.ok(Math.abs(tip.x) < .98 && Math.abs(tip.y) < .98 && tip.z > -1 && tip.z < 1, `${id}: long melee tip is cropped in first person`);
+          assert.ok(Math.abs(tip.x) < .98 && Math.abs(tip.y) < .98 && tip.z > -1 && tip.z < 1, `${id}: melee tip is cropped in first person`);
+          const hand = camera.worldToLocal(avatar.bones['DEF-handR'].getWorldPosition(new THREE.Vector3()));
+          assert.ok(hand.x > .14 && hand.y < -.25, `${id}: first-person guard must sit lower and farther right of center`);
         }
         avatar.playAttack({ id, kind, interval: .65 });
         for (let frame = 0; frame < 13; frame++) {
@@ -183,7 +187,8 @@ test('every imported weapon grip touches its mesh and stays attached through bot
           assert.ok(avatar.weaponDiagnostics.gripError < .003, `${mode}/${id}: grip detached during swing`);
           if (mode === 'first') for (const side of ['R', 'L']) {
             const shoulder = camera.worldToLocal(avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3()));
-            assert.ok(shoulder.z > -camera.near, `${id}: sword animation exposes the shoulder cut`);
+            const projection = shoulder.clone().applyMatrix4(camera.projectionMatrix);
+            assert.ok(shoulder.z > -camera.near || Math.abs(projection.y) > 1 || Math.abs(projection.x) > 1, `${id}: sword animation exposes the shoulder cut`);
           }
         }
       } else {
@@ -223,17 +228,21 @@ test('first-person Quaternius framing hides shoulder cuts and leaves the reticle
   const { avatar, camera, player, gun } = await fixture();
   player.cameraMode = 'first'; camera.position.copy(player.eyePosition);
   const ray = new THREE.Raycaster(), direction = new THREE.Vector3();
-  for (const [weapon, file] of [['pistol', 'pistol-quaternius'], ['automatic', 'assault-rifle-quaternius']]) {
-    const loaded = prepareWeaponModel(await loadAvatarGeometry(new URL(`../../public/models/${file}.glb`, import.meta.url)), weapon);
+  for (const weapon of ['pistol', 'automatic', 'revolver', 'shotgun', 'sniper', 'smg']) {
+    const loaded = prepareWeaponModel(await loadAvatarGeometry(new URL(`../../public/models/weapons/${weapon}.glb`, import.meta.url)), weapon);
     gun.clear(); gun.add(loaded.model); gun.userData.weaponGrip = loaded.grip;
     for (const aspect of [390 / 844, 1.6, 844 / 390]) for (const aimBlend of [0, 1]) for (const pitch of [-1, 0, 1]) {
       camera.aspect = aspect; camera.fov = aimBlend ? 45 : 70;
       camera.rotation.set(pitch, .7, 0, 'YXZ'); camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
-      avatar.update(0); avatar.updateWeapon(gun, { weapon, aimBlend }); avatar.playShot();
+      avatar.update(0); avatar.updateWeapon(gun, { weapon, aimBlend }); avatar.playShot(weapon === 'shotgun' ? 2.8 : 1);
       for (let frame = 0; frame < 16; frame++) {
-        avatar.update(.025); avatar.updateWeapon(gun, { weapon, aimBlend });
+        avatar.update(.025); avatar.updateWeapon(gun, { weapon, aimBlend, recoil: weapon === 'shotgun' ? 2.8 * Math.exp(-frame * .25) : 0 });
         camera.getWorldDirection(direction); ray.set(camera.position, direction);
         assert.equal(ray.intersectObject(gun, true).length, 0, `${weapon}/${aspect}/${aimBlend}: recoil obscures reticle`);
+        for (const [x, y] of [[0, -.035], [-.035, 0], [.035, 0]]) {
+          ray.setFromCamera(new THREE.Vector2(x, y), camera);
+          assert.equal(ray.intersectObject(gun, true).length, 0, `${weapon}/${aspect}/${aimBlend}: gun obscures the reticle ring`);
+        }
         for (const side of ['R', 'L']) {
           const shoulder = camera.worldToLocal(avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3()));
           assert.ok(shoulder.z > -camera.near, `${weapon}: shoulder cut enters the visible camera volume`);
@@ -241,6 +250,30 @@ test('first-person Quaternius framing hides shoulder cuts and leaves the reticle
       }
     }
   }
+});
+
+test('scope hides only first-person arms and restores both camera views on exit', async () => {
+  const { avatar, player, gun } = await fixture();
+  player.cameraMode = 'first'; avatar.update(0); avatar.updateWeapon(gun, { weapon: 'sniper', scoped: true });
+  assert.equal(avatar.meshes.filter(mesh => mesh.visible).length, 0);
+  player.cameraMode = 'third'; avatar.update(0); avatar.updateWeapon(gun, { weapon: 'sniper', scoped: true });
+  assert.ok(avatar.meshes.every(mesh => mesh.visible));
+  player.cameraMode = 'first'; avatar.update(0); avatar.updateWeapon(gun, { weapon: 'sniper', scoped: false });
+  assert.equal(avatar.meshes.filter(mesh => mesh.visible).length, 2);
+  assert.ok(avatar.weaponDiagnostics.gripError < .003);
+});
+
+test('a stronger authored shot produces a visibly larger third-person recoil', async () => {
+  const peaks = [];
+  for (const strength of [1, 2.8]) {
+    const { avatar, gun } = await fixture(); avatar.update(0); avatar.updateWeapon(gun);
+    const neutral = gun.quaternion.clone(); avatar.playShot(strength); let peak = 0;
+    for (let i = 0; i < 25; i++) {
+      avatar.update(.025); avatar.updateWeapon(gun); peak = Math.max(peak, neutral.angleTo(gun.quaternion));
+    }
+    peaks.push(peak);
+  }
+  assert.ok(peaks[1] > peaks[0] * 1.7, 'shotgun strength must visibly affect the authored recoil');
 });
 
 test('supplied GLB preserves locomotion and pistol clips with bounded finite animated geometry', async () => {

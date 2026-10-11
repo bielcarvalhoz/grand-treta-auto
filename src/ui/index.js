@@ -4,6 +4,7 @@ import { createHud } from './hud.js';
 import { placeMarker } from './marker-layout.js';
 import { installGestureGuard } from './gestures.js';
 import { createWeaponWheel } from './weapon-wheel.js';
+import { createSniperScope } from './sniper-scope.js';
 import './style.css';
 
 export { loading, createFrontMenu } from './front-menu.js';
@@ -23,6 +24,7 @@ export function createUI(game) {
   const points = game.mapPoints, places = game.places;
   let touchSession = IS_TOUCH;
   const weaponWheel = createWeaponWheel(game);
+  const sniperScope = createSniperScope(game);
 
   const toast = msg => {
     const el = $('toast'); el.textContent = msg; el.classList.add('show');
@@ -91,6 +93,7 @@ export function createUI(game) {
     footprints: map.footprints, quarter: map.world.quarter, proj: map.proj, terrain: map.terrain,
     streetAt: map.roads.streetAt, places: points, onSelect: selectPoint, getMode: () => game.mode });
   engine.addSystem((dt, t) => {
+    sniperScope.update();
     if (game.mode && game.mode !== 'training') hud.update(t, dt, tour.active ? engine.camera.position : player.feet, player.yaw, player.fly);
   }, 'late');
 
@@ -115,6 +118,7 @@ export function createUI(game) {
   syncCameraMode();
   game.input.bind('KeyX', toggleCamera, { label: 'primeira / terceira pessoa' });
   engine.renderer.domElement.addEventListener('wheel', event => {
+    if (sniperScope.handleWheel(event)) return;
     if (!walkingMode() || !player.active || weaponWheel.open || mapPanel.classList.contains('open') || event.ctrlKey || !event.deltaY) return;
     event.preventDefault();
     // Direction selects a view, so a smooth trackpad gesture cannot flicker it.

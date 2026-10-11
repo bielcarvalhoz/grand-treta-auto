@@ -43,7 +43,7 @@ A música original dos menus e os efeitos de navegação/paintball usam Web Audi
 | Segurar `Q` | abrir roda; apontar e soltar para equipar |
 | `E` | pegar arma próxima e soltar a anterior do slot |
 | `X` | alternar primeira/terceira pessoa |
-| Scroll ↑ / ↓ | primeira / terceira pessoa |
+| Scroll ↑ / ↓ | aumentar / reduzir zoom no escopo da AWP; fora dele, primeira / terceira pessoa |
 | Botão direito | segurar mira focada |
 | `M` | mapa — clique para se teletransportar |
 | `1`–`7` | teletransporte (as 3 portarias do campus e outros lugares) |

@@ -8,7 +8,7 @@ os GLBs não são modelos oficiais de CS.
 | --- | --- | ---: | ---: | --- |
 | Pistol | Glock-18 | 30 | 0,15 s | Semiautomática |
 | Assault Rifle | M4A4 | 33 | 0,09 s | Automática |
-| Revolver | R8 Revolver | 86 | 0,50 s | Segurar; preparação de 0,20 s |
+| Revolver | R8 Revolver | 86 | 0,50 s | Toque ou segurar; preparação de 0,20 s |
 | Shotgun | Nova | 26 | 0,88 s | Um cartucho com 9 projéteis; cone de dispersão |
 | Sniper Rifle | AWP | 115 | 1,455 s | Tiro único; mira com FOV 40 e maior precisão |
 | Submachine Gun | MP5-SD | 28 | 0,08 s | Automática |
@@ -36,6 +36,18 @@ penetração, multiplicadores de cabeça ou sistema de munição/recarga neste
 protótipo. Modos alternativos de CS, como rajada da Glock e disparo secundário
 do R8, não fazem parte dos controles atuais. O cone da Nova é uma distribuição
 em disco; não reproduz o padrão proprietário de pellets de CS.
+
+Um toque no R8 aceita um disparo e conclui os 0,20 s de preparação mesmo
+após soltar o botão; segurar continua os disparos a cada 0,50 s. Trocar a
+arma, pausar ou cancelar os controles interrompe a preparação pendente.
+Essa adaptação permite os mesmos controles por toque e mouse.
+O coice visual da Nova tem amplitude de 2,8 vezes a referência padrão e
+recuperação mais lenta, aplicada no mesmo envelope de arma/animação.
+
+A mira focada da AWP em primeira pessoa usa uma abertura circular com retículo
+telescópico, ocultando braços e arma. O scroll aumenta/reduz a ampliação entre
+2× e 8×; no celular, os botões +/− fazem o mesmo. Ao sair do escopo, o scroll
+volta a alternar a câmera. Em terceira pessoa a AWP mantém a mira focada comum.
 
 Faca, faca tática, faca de combate, machado e bastão com arame usam golpes
 curtos com a animação de espada. Socos alternam as animações disponíveis.
