@@ -101,7 +101,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     root.updateMatrixWorld(true);
   }
   function playShot() {
-    if (!preview && shootAction) shootAction.reset().setEffectiveWeight(1).play();
+    if (!preview && shootAction) shootAction.reset().setEffectiveWeight(player.cameraMode === 'first' ? .12 : .65).play();
   }
 
   const palm = vector(), gripLocal = vector(), weaponDiagnostics = { gripError: 0 };
@@ -112,13 +112,15 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     const handRotation = rightHand.getWorldQuaternion(quaternion());
     gun.quaternion.copy(handRotation).multiply(socketRotation);
     gun.scale.setScalar(.65);
-    palm.set(0, .028 * scale, 0).applyQuaternion(handRotation).add(rightHand.getWorldPosition(vector()));
-    gripLocal.set(0, weapon === 'automatic' ? -.15 : -.13, weapon === 'automatic' ? .065 : .08);
+    // Grip centre lies inside the curled fingers, left/forward of the wrist.
+    palm.copy(rightHand.localToWorld(vector().set(-.014, .044, -.004)));
+    if (gun.userData.weaponGrip) gripLocal.copy(gun.userData.weaponGrip);
+    else gripLocal.set(0, weapon === 'automatic' ? -.15 : -.13, weapon === 'automatic' ? .065 : .08);
     gun.position.copy(palm).sub(gripLocal.clone().multiplyScalar(.65).applyQuaternion(gun.quaternion));
     if (player.cameraMode === 'first') {
       // Frame the original animated arms as a unit. Moving their common root
       // preserves every authored joint and keeps ADS readable on narrow screens.
-      const desired = vector().set(Math.min(.20, camera.aspect * .18) * (1 - aimBlend), -.22 + .158 * aimBlend, -.66 - .08 * aimBlend)
+      const desired = vector().set(Math.min(.14, camera.aspect * .11) * (1 - aimBlend), -.24 + (weapon === 'automatic' ? .06 : .10) * aimBlend, -.34 - .04 * aimBlend)
         .applyQuaternion(camera.quaternion).add(player.eyePosition);
       const shift = desired.sub(gun.position);
       root.position.add(shift); gun.position.add(shift); palm.add(shift);

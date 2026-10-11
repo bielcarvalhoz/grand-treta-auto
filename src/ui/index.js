@@ -111,6 +111,12 @@ export function createUI(game) {
   player.setCameraMode($('camera-mode').value);
   syncCameraMode();
   game.input.bind('KeyX', toggleCamera, { label: 'primeira / terceira pessoa' });
+  engine.renderer.domElement.addEventListener('wheel', event => {
+    if (!walkingMode() || !player.active || mapPanel.classList.contains('open') || event.ctrlKey || !event.deltaY) return;
+    event.preventDefault();
+    // Direction selects a view, so a smooth trackpad gesture cannot flicker it.
+    player.setCameraMode(event.deltaY < 0 ? 'first' : 'third');
+  }, { passive: false });
 
   const c = game.campus?.stats;
   $('stat-line').textContent = `${c ? `${c.buildings} estruturas · ${c.trees} árvores · ` : ''}Entorno ${map.surroundingsEnabled ? 'ativado' : 'desabilitado'} · Gráfico ${game.quality.name.toUpperCase()}`;

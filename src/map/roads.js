@@ -158,7 +158,9 @@ export function buildRoads(world, terrain, renderer) {
       // faixas (L,C) e (C,R) — ordem anti-horária vista de cima (normal +y)
       g.idx.push(a + 1, a, b, a + 1, b, b + 1);
       g.idx.push(a + 2, a + 1, b + 1, a + 2, b + 1, b + 2);
-      if (r.internal && !deck) for (const indices of [[a + 1, a, b], [a + 1, b, b + 1], [a + 2, a + 1, b + 1], [a + 2, b + 1, b + 2]]) {
+      // Every visible carriageway supports the player, including outside campus.
+      // Bridges retain their separate deck query below.
+      if (!deck) for (const indices of [[a + 1, a, b], [a + 1, b, b + 1], [a + 2, a + 1, b + 1], [a + 2, b + 1, b + 2]]) {
         const triangle = indices.map(index => g.pos.slice(index * 3, index * 3 + 3));
         roadSurfaces.insertBox(triangle, Math.min(...triangle.map(v => v[0])), Math.min(...triangle.map(v => v[2])), Math.max(...triangle.map(v => v[0])), Math.max(...triangle.map(v => v[2])));
       }

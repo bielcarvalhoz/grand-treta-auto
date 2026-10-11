@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { createTerrain } from '../../src/map/terrain.js';
 import { gradeCampusTerrain } from '../../src/campus/grading.js';
 import { buildRoads } from '../../src/map/roads.js';
@@ -207,6 +208,38 @@ test('unnamed internal service street gets two-way centre paint, flat road secti
     assert.ok(Array.from(retaining.geometry.attributes.normal.array).every(Number.isFinite));
     assert.equal(roads.surfaceHeightAt(50, 50, 0), -Infinity);
   } finally { delete globalThis.document; }
+});
+
+test('external flat and sloped roads support the player at their rendered triangles, within their edges and maxY', () => {
+  const previousDocument = globalThis.document;
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ({ fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, putImageData() {}, getImageData: (_x, _y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }) }) }) };
+  try {
+    for (const sloped of [false, true]) {
+      const terrain = sloped ? makeTerrain() : { heightAt: () => 0 };
+      const road = { pts: [[15, 50], [85, 50]], name: 'Rua externa', w: 7, order: 5, kind: 'local', lanes: 2, tags: {}, internal: false, bridge: false };
+      const roads = buildRoads({ roads: [road] }, terrain, { capabilities: { getMaxAnisotropy: () => 1 } });
+      roads.root.updateMatrixWorld(true);
+      const raycaster = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0));
+      for (const x of [15.2, 29.1, 50.3, 84.7]) for (const z of [46.5, 48.2, 50, 51.8, 53.5]) {
+        raycaster.ray.origin.set(x, 100, z);
+        const hit = raycaster.intersectObjects(roads.root.children, false)[0];
+        assert.ok(hit, `${sloped}/${x}/${z}: rendered road missing`);
+        const support = roads.surfaceHeightAt(x, z);
+        assert.ok(Math.abs(support - hit.point.y) < 1e-5, `${sloped}/${x}/${z}: feet sink below visible road`);
+        assert.ok(support > terrain.heightAt(x, z) + .13, 'the asphalt lift participates in navigation');
+        assert.ok(Math.abs(roads.surfaceHeightAt(x, z, hit.point.y + 1e-5) - hit.point.y) < 1e-5);
+        assert.equal(roads.surfaceHeightAt(x, z, hit.point.y - .001), -Infinity, 'surfaces above maxY remain excluded');
+      }
+      for (const [x, z] of [[14.9, 50], [85.1, 50], [50, 46.4], [50, 53.6]]) {
+        assert.equal(roads.surfaceHeightAt(x, z), -Infinity, 'support does not extend past the rendered carriageway');
+      }
+      const bridge = buildRoads({ roads: [{ ...road, bridge: true }] }, terrain, { capabilities: { getMaxAnisotropy: () => 1 } });
+      assert.equal(bridge.surfaceHeightAt(50, 50), -Infinity, 'bridge decks keep their dedicated query');
+      assert.ok(bridge.bridgeHeightAt(50, 50, 100) > terrain.heightAt(50, 50));
+    }
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument;
+  }
 });
 
 test('ground control shifts the satellite relief to surveyed heights and fades back to it', () => {

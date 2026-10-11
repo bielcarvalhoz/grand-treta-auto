@@ -153,6 +153,7 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
   const raycaster = new THREE.Raycaster(), forward = new THREE.Vector3(), origin = new THREE.Vector3(), target = new THREE.Vector3(), shotOrigin = new THREE.Vector3();
   let colorIndex = 2, projectileIndex = 0, markIndex = 0, cooldown = 0, recoil = 0, shots = 0, disposed = false;
   let weaponIndex = 0, trigger = false, aiming = false, aimBlend = 0;
+  let weaponModels = null;
   const baseFov = camera.fov;
   const restoreView = () => {
     aiming = false; aimBlend = 0;
@@ -190,6 +191,7 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     const index = typeof value === 'number' ? value : PAINTBALL_PALETTE.findIndex(p => p.id === value);
     if (!Number.isInteger(index) || index < 0 || index >= colors.length) throw new RangeError('Cor de tinta inválida');
     colorIndex = index; reservoir.material = hopper.material = colors[index].gun;
+    if (weaponModels) for (const model of Object.values(weaponModels)) model.setColor(PAINTBALL_PALETTE[index].color);
     return PAINTBALL_PALETTE[index];
   }
 
@@ -230,8 +232,22 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
     if (!Number.isInteger(index) || index < 0 || index >= PAINTBALL_WEAPONS.length) throw new RangeError('Arma inválida');
     trigger = false; weaponIndex = index;
     pistolModel.visible = index === 0; autoModel.visible = index === 1;
-    muzzlePoint.position.z = index === 0 ? -.38 : -.62;
+    const loaded = weaponModels?.[PAINTBALL_WEAPONS[index].id];
+    if (loaded) { muzzlePoint.position.copy(loaded.muzzle); gun.userData.weaponGrip = loaded.grip; }
+    else muzzlePoint.position.set(0, .012, index === 0 ? -.38 : -.62);
     return PAINTBALL_WEAPONS[index];
+  }
+
+  function setWeaponModels(models) {
+    weaponModels = models;
+    for (const [id, parent] of [['pistol', pistolModel], ['automatic', autoModel]]) {
+      parent.clear(); parent.add(models[id].model);
+      models[id].model.traverse(object => {
+        if (!object.isMesh) return;
+        geometries.add(object.geometry); materials.add(object.material);
+      });
+    }
+    setColor(colorIndex); setWeapon(weaponIndex);
   }
 
   function update(dt) {
@@ -274,7 +290,7 @@ export function createPaintball({ scene, camera, getActive = () => true, collide
 
   gun.visible = !!getActive();
   return {
-    root, gun, update, shoot, setColor, setTrigger, setWeapon, clearEffects, palette: PAINTBALL_PALETTE, weapons: PAINTBALL_WEAPONS, dispose,
+    root, gun, update, shoot, setColor, setTrigger, setWeapon, setWeaponModels, clearEffects, palette: PAINTBALL_PALETTE, weapons: PAINTBALL_WEAPONS, dispose,
     setAiming(value) { aiming = !disposed && !!getActive() && !!value; if (!getActive()) restoreView(); },
     resetInput() { trigger = false; restoreView(); },
     async warmup(renderer) {
