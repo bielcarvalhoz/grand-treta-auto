@@ -12,7 +12,7 @@ quebrar o trabalho de quem cuida de outro módulo.
 | `src/map/` | Mapa (mundo real) | relevo SRTM, vias, prédios do OSM, prédios procedurais, vegetação, água, muros, semáforos, placas, destinos do entorno | melhorar ruas, novos tipos de prédio, mais vegetação |
 | `src/campus/` | Campus Cidade de Deus | núcleo do Bradesco: prédios da planta oficial, muros, portarias, estacionamentos, terraplenagem, detalhes, marcos levantados em campo (`landmarks.js`: escadaria, beco, acessos, locomotiva) | novo prédio, fachada, mobiliário do campus |
 | `src/player/` | Personagem | avatar Sato, animações e encaixe de armas; controle em primeira/terceira pessoa, teclado, mouse, toque, colisão, pulo, voo | modelo/avatar, animação, corrida, agachar |
-| `src/gameplay/<mecânica>/` | Jogabilidade | `paintball/`: catálogo, inventário, armas de fogo, melee, socos e armas no chão | missões, carros, coletáveis, multiplayer |
+| `src/gameplay/<mecânica>/` | Jogabilidade | `paintball/`: catálogo, inventário, armas e impactos; `combat/`: ECS Miniplex, hitboxes, dano, kills, IA Yuka/BFS e laboratório de treino | missões, carros, coletáveis, multiplayer |
 | `src/ui/` | Interface | tela de carregamento, menu, HUD, minimapa, mapa grande, avisos, gestos mobile, CSS | novas telas, configurações, acessibilidade |
 | `src/debug/` | Depuração | `window.__cdd`, vistas de inspeção `?inspect=` | ferramentas de QA |
 | `src/shared/` | Utilitários | funções puras: geometria 2D, aleatoriedade, geometria de vias, texturas procedurais, download de JSON com parsing adiado | — |
@@ -24,7 +24,7 @@ quebrar o trabalho de quem cuida de outro módulo.
 `src/main.js` só **monta** o jogo, nesta ordem:
 
 ```
-menu + intro + downloads → fim da intro apresentado → JSON (map + campus) → core (game) → mapa (+ plugin campus) → lotes → treino → caixas/Rapier → personagem + GLB pronto → tour → combate/BVH + modelos → armas no chão → UI → visual → materiais → debug → menu pronto
+menu + intro + downloads → fim da intro apresentado → JSON (map + campus) → core (game) → mapa (+ plugin campus) → lotes → treino → caixas/Rapier → personagem + GLB pronto → tour → modelos de armas → combate/Miniplex/Yuka + GLBs + laboratório → paintball/BVH → armas no chão → UI → visual → materiais → debug → menu pronto
 ```
 
 `createFrontMenu()` expõe `introFinished`, que resolve após a abertura (ou pular/configurações/movimento reduzido) e dois `requestAnimationFrame`, garantindo que a capa final seja apresentada antes do trabalho pesado. `loadMapData(base, { beforeParse })` e `loadCampusData(base, { beforeParse })` baixam o corpo durante a intro e aguardam essa promessa antes de fazer JSON.parse. `main.js` também aguarda explicitamente antes de criar WebGL/PMREM e montar o mundo. Animações CSS não protegem o texto de tarefas longas na thread principal. Depois de carregar, o motor mantém sistemas leves a 15 Hz no menu opaco e pula o desenho da cidade oculta; a renderização normal volta ao iniciar campanha/tour.
@@ -135,13 +135,13 @@ polegar à geometria skinned existente, sem novos draw calls ou alterações no 
 preservando a nuca e o asset original. A classe `body.playing`, vinculada a lock/unlock do jogador,
 oculta o cursor no jogo e restaura o cursor ao abrir menus/mapa.
 
-`core/training.js` expõe `start()`, `stop()`, `active`, `floor`, `terrain`, `bounds`
+`core/training.js` expõe `start()`, `stop()`, `active`, `floor`, `root`, `obstacles`, `terrain`, `bounds`
 e consultas de colisão/pisos/telhados compatíveis com as usadas pelo personagem.
 O modo `training` oculta a cidade e usa uma área plana isolada; `player/index.js`
 seleciona essas consultas enquanto o treino está ativo e desativa o voo. A saída
 restaura visibilidade, atmosfera, câmera e posição anteriores. A UI emite
 `modechange` ao entrar ou sair dos modos; paintball limpa gatilho, mira, projéteis
-e marcas de tinta. Durante o treino, seus raios consultam o piso e a caixa ativa.
+e marcas de tinta. Durante o treino, seus raios consultam o piso, obstáculos, caixas e hitboxes via `game.combat`. O treino possui pisos e colisão nos obstáculos próprios, sem consultar a cidade.
 
 `core/dynamic-props.js` inicializa Rapier por importação assíncrona e cria uma caixa
 de madeira e uma de metal por espaço. O mundo usa passo fixo de 1/60 s, piso de treino e uma
@@ -171,6 +171,7 @@ dinâmicos seguem a matriz local da caixa, sem projetar novamente durante o movi
 | `game.training` | espaço quadriculado isolado e consultas físicas próprias; restaura o estado da cidade ao sair | core cria antes do avatar; UI inicia/encerra; player e paintball consultam |
 | `game.dynamicProps` | caixas Rapier, `root`, `impact`, consultas de colisão/topo | core cria antes do avatar; player e paintball usam |
 | `game.weaponPickups` | armas no chão, `nearby`, `pickup` e reposição do item descartado | gameplay cria antes da UI |
+| `game.combat` | autoridade local Miniplex de vida, equipes, dano e kills; IA Yuka sobre BFS, rigs de colisão, cenários e bancada física | gameplay monta antes do paintball; player, paintball e UI consultam por contexto |
 | `game.mode`, `game.tour`, `game.mapPoints`, `game.settings` | modo ativo, câmera independente, destinos numerados e escolhas persistentes | main, core, campus, UI |
 | `game.places` | destinos de teletransporte `{ name, x, z, yaw }` | campus e mapa adicionam; UI e personagem leem |
 | `game.input` | `bind('KeyP', fn, { when: 'playing' \| 'always', label })` | cada módulo registra as próprias teclas |
@@ -228,6 +229,8 @@ O mapa é construído por um pipeline. Quem precisa alterar o mundo (como o camp
 
 Precisa de uma dependência nova? Altere a tabela `DEPENDENCIAS` em
 `scripts/check-modules.mjs` **e** esta página no mesmo PR, para a mudança ficar visível na revisão.
+
+`gameplay/combat` está registrado explicitamente no verificador, com as dependências da linha `gameplay/*`. App e debug podem importá-lo pela API pública; paintball, player e UI o acessam por `game.combat`. Veja [configuração, eventos e limites do combate](COMBAT-TRAINING.md). O sistema de combate roda na fase `world`, antes dos projéteis; a UI de combate roda em `late`.
 
 3. Testes de um módulo ficam em `tests/<módulo>/` e podem importar o interior do módulo.
 4. Mudou a API pública (`index.js`) de um módulo? Descreva no PR e peça revisão de quem usa.

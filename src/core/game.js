@@ -32,6 +32,7 @@ export function createGame({ quality, debug, status, container, settings, audio 
     campus: null,
     player: null,
     paintball: null,
+    combat: null,
     ui: null,
     styler: null,
   };

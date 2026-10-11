@@ -68,3 +68,14 @@ test('training physics is flat and bounded, with no city roofs or surfaces', () 
   assert.deepEqual(training.collide(spawn.x, spawn.z, .35), [spawn.x, spawn.z]);
   assert.deepEqual(training.collide(bounds.x0 - 100, bounds.z1 + 100, .35), [bounds.x0 + .35, bounds.z1 - .35]);
 });
+
+test('training cover blocks movement at ground level and supports feet above its visible top', () => {
+  const training = createTraining(fixture().game), wall = training.obstacles[0];
+  const x = (wall.min.x + wall.max.x) / 2, z = (wall.min.z + wall.max.z) / 2;
+  assert.notDeepEqual(training.collide(x, z, .35, 0), [x, z]);
+  assert.deepEqual(training.collide(x, z, .35, wall.max.y), [x, z]);
+  assert.equal(training.surfaceHeightAt(x, z, wall.max.y + 1), wall.max.y);
+  assert.equal(training.surfaceHeightAt(x, z, wall.max.y - .1), -Infinity);
+  assert.equal(training.roofAt(x, z, 0), -Infinity);
+  assert.equal(training.roofAt(x, z, wall.max.y), wall.max.y);
+});

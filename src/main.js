@@ -13,6 +13,7 @@ import { loadMapData, buildMap } from './map/index.js';
 import { loadCampusData, createCampusPlugin } from './campus/index.js';
 import { createPlayerModule } from './player/index.js';
 import { createPaintballModule, loadWeaponModels, createWeaponPickups } from './gameplay/paintball/index.js';
+import { createCombatModule } from './gameplay/combat/index.js';
 import { createUI, loading, applyDeviceClasses, createFrontMenu } from './ui/index.js';
 import { installDebug } from './debug/index.js';
 
@@ -44,8 +45,10 @@ async function main() {
   await loading.status('Preparando o personagem Sato...', 90);
   await game.player.ready;
   game.tour = createTour(game);
-  game.paintball = createPaintballModule(game);
   const weaponModels = await loadWeaponModels(base);
+  await loading.status('Preparando zumbis, bots e laboratório de combate...', 93);
+  game.combat = await createCombatModule(game, { base, weaponModels });
+  game.paintball = createPaintballModule(game);
   game.paintball.setWeaponModels(weaponModels);
   game.weaponPickups = createWeaponPickups(game, weaponModels);
   game.ui = createUI(game);

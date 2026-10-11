@@ -13,7 +13,7 @@ export function createWeaponWheel(game) {
   const cursor = $('weapon-wheel-cursor');
   let owner = null, choices = [], pending = null, virtualX = 0, virtualY = 0;
   let signature = '', pickupSignature = '', pointerId = null, lastGesture = -Infinity;
-  const canUse = () => player.active && !game.ui?.mapOpen && game.mode !== 'tour';
+  const canUse = () => player.active && !game.ui?.mapOpen && !game.ui?.combatHUD?.panelOpen && (game.combat?.canPlayerAct ?? true) && game.mode !== 'tour';
   const icon = weapon => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
@@ -123,6 +123,7 @@ export function createWeaponWheel(game) {
     pickupButton.setAttribute('aria-label', `${$('pickup-label').textContent}. ${$('pickup-detail').textContent}`);
   }
   function pickup() {
+    if (game.combat?.trainingLab?.probe()) return;
     if (!canUse() || owner || player.fly) return;
     const result = game.weaponPickups?.pickup(); if (!result) return;
     syncWeaponButton(); syncPickup();

@@ -14,8 +14,10 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
+    "miniplex": "^2.0.0",
     "three": "^0.186.1",
-    "three-mesh-bvh": "^0.9.16"
+    "three-mesh-bvh": "^0.9.16",
+    "yuka": "^0.7.8"
   },
   "devDependencies": {
     "osmtogeojson": "^3.0.0-beta.5",

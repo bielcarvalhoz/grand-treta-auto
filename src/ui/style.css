@@ -410,6 +410,38 @@ body.touch #btn-pickup { bottom: max(102px, calc(env(safe-area-inset-bottom) + 9
 /* Optical aperture remains centered on the camera's actual shot direction. */
 #sniper-scope { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; pointer-events: none; }
 #sniper-scope[hidden] { display: none !important; }
+
+/* Combat feedback shares the training HUD; human HP is never shown in-world. */
+body.training-active #training-status { display: none; }
+#combat-hud[hidden], #combat-hud [hidden] { display: none !important; }
+.combat-status { position: absolute; top: max(14px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left)); width: 300px; padding: 12px 14px; border-left: 3px solid #75c5d5; border-radius: 7px; background: #14212bea; color: #edf4f4; }
+.combat-status > small { font-size: 9px; letter-spacing: .12em; color: #98cfd7; }
+.combat-health { display: flex; justify-content: space-between; gap: 12px; margin-top: 9px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.combat-health > span { color: #c5d5dc; font-size: 10px; }
+.combat-health-track { height: 5px; margin: 6px 0 8px; border-radius: 3px; background: #071119; overflow: hidden; }
+#combat-health-fill { display: block; height: 100%; background: #8dd99b; transition: width .15s; }
+.combat-status p { font-size: 10px; margin: 5px 0; color: #bacbd3; }
+#combat-hud button { pointer-events: auto; font: inherit; color: #edf4f4; border: 1px solid #586e7b; border-radius: 5px; background: #273d4a; padding: 9px 12px; min-height: 40px; cursor: pointer; touch-action: manipulation; }
+#combat-lab-toggle { margin-top: 5px; width: 100%; font-size: 11px !important; }
+#combat-lab-toggle kbd { margin-left: 8px; color: #a0bdc8; }
+#combat-hit { position: absolute; top: calc(50% + 32px); left: 50%; transform: translateX(-50%); color: #fff1c9; font-size: 12px; text-shadow: 0 1px 4px #000; white-space: nowrap; }
+#combat-hit[data-killed="true"] { color: #ff9c91; }
+#combat-respawn { position: absolute; inset: 0; display: grid; place-items: center; background: #27121b70; font-size: clamp(16px, 3vw, 30px); text-shadow: 0 2px 8px #000; }
+#combat-interact { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%); white-space: nowrap; font-size: 12px !important; }
+#combat-hud.combat-hurt::before { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 90px #db3c3888; pointer-events: none; }
+#combat-lab-panel { position: absolute; top: 50%; right: max(18px, env(safe-area-inset-right)); transform: translateY(-50%); width: min(440px, calc(100vw - 30px)); max-height: calc(100dvh - 30px); overflow-y: auto; padding: 16px; background: #12232bf5; border: 1px solid #77aeb9; border-radius: 10px; pointer-events: auto; touch-action: pan-y; color: #e5f0f2; z-index: 16; }
+.combat-lab-heading { display: flex; justify-content: space-between; align-items: center; font-size: 13px; letter-spacing: .1em; }
+#combat-lab-close { font-size: 22px !important; padding: 2px 12px !important; }
+#combat-lab-panel p, #combat-lab-panel small { font-size: 11px; line-height: 1.6; color: #b7cbd2; }
+#combat-lab-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 12px 0; }
+#combat-lab-actions button { min-height: 44px; padding: 8px 4px; font-size: 10px; }
+#combat-mark-point { margin-bottom: 12px; width: 100%; font-size: 11px !important; }
+#combat-lab-panel small { display: block; }
+body.playing #combat-hud button { cursor: pointer; }
+body.touch .combat-status { width: min(250px, calc(100vw - 100px)); padding: 9px 11px; }
+body.touch .combat-health { font-size: 10px; }
+body.touch .combat-status p { font-size: 9px; }
+@media (max-height: 500px) { .combat-status { width: 250px; padding: 8px 11px; } .combat-status p { margin: 3px 0; } #combat-lab-panel { width: min(410px, calc(100vw - 30px)); } }
 .sniper-scope-lens { position: relative; width: 88vmin; height: 88vmin; border-radius: 50%; overflow: hidden; border: 2px solid #080b0e; box-shadow: 0 0 0 100vmax #030507, inset 0 0 24px 9px #000b; background: radial-gradient(circle, transparent 55%, #0001 75%, #0009 100%); }
 .sniper-scope-reticle { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #101410; stroke-width: .45; }
 .sniper-scope-center { fill: #b12b28; stroke: none; }
