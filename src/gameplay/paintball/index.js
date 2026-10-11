@@ -4,6 +4,7 @@ import { createPaintball } from './paintball.js';
 // Usa os elementos #paint-color, #paint-label, #paint-chip, #btn-color e #btn-fire do index.html.
 
 export { PAINTBALL_PALETTE, PAINTBALL_LIMITS, PAINTBALL_WEAPONS } from './paintball.js';
+export { loadWeaponModels } from './weapon-models.js';
 
 export function createPaintballModule(game) {
   const { scene, camera, renderer } = game.engine;

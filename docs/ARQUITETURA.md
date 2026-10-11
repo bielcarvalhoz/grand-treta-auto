@@ -55,6 +55,14 @@ não representa uma mecânica de recarga no jogo. `public/models/sato.glb` é um
 sem alterações do `sato (4).glb` fornecido pelo usuário. A orientação dos punhos e
 a articulação dos dedos vêm da pose de pistola original, sem reescrever o asset.
 
+`gameplay/paintball/weapon-models.js` carrega os GLBs Quaternius antes da coleta
+de materiais e do warmup. Normaliza escala/eixo e fornece empunhadura e cano para
+`setWeaponModels()`. A seleção da tinta atualiza só os detalhes das armas;
+`keepStandard` preserva seus materiais e o filtro localizado no modo cartoon.
+Na primeira pessoa os ombros ficam atrás do plano próximo da câmera, e o recuo
+aditivo tem peso reduzido para manter o retículo visível. O scroll no canvas ativo
+seleciona primeira pessoa para cima e terceira para baixo, sem interferir no mapa/tour.
+
 `core/training.js` expõe `start()`, `stop()`, `active`, `floor`, `terrain`, `bounds`
 e consultas de colisão/pisos/telhados compatíveis com as usadas pelo personagem.
 O modo `training` oculta a cidade e usa uma área plana isolada; `player/index.js`

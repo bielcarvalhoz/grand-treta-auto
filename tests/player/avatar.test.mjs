@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import * as THREE from 'three';
 import { createAvatarFromGLTF } from '../../src/player/avatar.js';
 import { loadAvatarGeometry } from './load-avatar.mjs';
+import { prepareWeaponModel } from '../../src/gameplay/paintball/weapon-models.js';
 
 const asset = new URL('../../public/models/sato.glb', import.meta.url);
 test('player asset is the unmodified functional Sato version supplied by the user', async () => {
@@ -78,6 +79,30 @@ test('third-person aim tracks camera pitch and shooting retains the selected aim
     for (let frame = 0; frame < 16; frame++) {
       avatar.update(.05); avatar.updateWeapon(gun);
       assert.ok(forward().angleTo(aimed) < .35, `camera pitch ${pitch}: shooting resets the aimed pose`);
+    }
+  }
+});
+
+test('first-person Quaternius framing hides shoulder cuts and leaves the reticle clear during recoil', async () => {
+  const { avatar, camera, player, gun } = await fixture();
+  player.cameraMode = 'first'; camera.position.copy(player.eyePosition);
+  const ray = new THREE.Raycaster(), direction = new THREE.Vector3();
+  for (const [weapon, file] of [['pistol', 'pistol-quaternius'], ['automatic', 'assault-rifle-quaternius']]) {
+    const loaded = prepareWeaponModel(await loadAvatarGeometry(new URL(`../../public/models/${file}.glb`, import.meta.url)), weapon);
+    gun.clear(); gun.add(loaded.model); gun.userData.weaponGrip = loaded.grip;
+    for (const aspect of [390 / 844, 1.6, 844 / 390]) for (const aimBlend of [0, 1]) for (const pitch of [-1, 0, 1]) {
+      camera.aspect = aspect; camera.fov = aimBlend ? 45 : 70;
+      camera.rotation.set(pitch, .7, 0, 'YXZ'); camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+      avatar.update(0); avatar.updateWeapon(gun, { weapon, aimBlend }); avatar.playShot();
+      for (let frame = 0; frame < 16; frame++) {
+        avatar.update(.025); avatar.updateWeapon(gun, { weapon, aimBlend });
+        camera.getWorldDirection(direction); ray.set(camera.position, direction);
+        assert.equal(ray.intersectObject(gun, true).length, 0, `${weapon}/${aspect}/${aimBlend}: recoil obscures reticle`);
+        for (const side of ['R', 'L']) {
+          const shoulder = camera.worldToLocal(avatar.bones[`DEF-upper_arm${side}`].getWorldPosition(new THREE.Vector3()));
+          assert.ok(shoulder.z > -camera.near, `${weapon}: shoulder cut enters the visible camera volume`);
+        }
+      }
     }
   }
 });

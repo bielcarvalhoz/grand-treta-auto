@@ -27,7 +27,7 @@ Abra http://localhost:5173 e escolha **Campanha**, **Modo treino** ou **Modo tou
 
 O **Modo treino** abre um espaço vazio com piso quadriculado: cada quadrado mede 2 metros. Use-o para andar, correr, pular e testar as armas e câmeras. O treino tem chão plano e limites próprios; mapa, teletransporte e voo ficam desativados. Ao sair, a posição anterior na cidade é restaurada.
 
-O personagem **Sato**, carregado de `public/models/sato.glb`, segura a pistola e a metralhadora de paintball. `X`, o botão de câmera ou a configuração de câmera alternam entre primeira e terceira pessoa. As duas vistas usam o mesmo modelo, esqueleto e materiais; em primeira pessoa aparecem apenas braços, mãos e arma. As armas acompanham as animações originais das mãos, incluindo mira e disparo.
+O personagem **Sato**, carregado de `public/models/sato.glb`, segura a pistola e a metralhadora de paintball. `X`, o botão de câmera ou a configuração de câmera alternam entre primeira e terceira pessoa. O scroll para cima seleciona primeira pessoa; para baixo, terceira. As duas vistas usam o mesmo modelo, esqueleto e materiais; em primeira pessoa aparecem apenas braços, mãos e arma. Os GLBs de armas Quaternius enviados pelo usuário acompanham as animações originais das mãos, incluindo mira e disparo. A tinta colore somente uma faixa da pistola e um detalhe do rifle; o restante mantém o cinza original.
 
 No celular, jogue em pé ou deitado: toque à esquerda para abrir o analógico (avance até o limite para correr) e arraste do outro lado para mirar. Segure e arraste o ícone de tiro para mirar e disparar enquanto anda. O ícone de mira aproxima a visão e reduz a sensibilidade; o ícone da arma troca pistola/metralhadora de paintball. Há botões de câmera, pulo, voo, mapa, menu e orientação. Campanha, treino e tour liberam depois do carregamento; configurações estão disponíveis desde o início e avisam antes de reiniciar a cidade.
 
@@ -42,6 +42,7 @@ A música original dos menus e os efeitos de navegação/paintball usam Web Audi
 | `F` | voo livre (`E`/`Control` sobe/desce) |
 | `Q` | trocar pistola/metralhadora |
 | `X` | alternar primeira/terceira pessoa |
+| Scroll ↑ / ↓ | primeira / terceira pessoa |
 | Botão direito | segurar mira focada |
 | `M` | mapa — clique para se teletransportar |
 | `1`–`7` | teletransporte (as 3 portarias do campus e outros lugares) |

@@ -33,7 +33,16 @@ async function run() {
       assert.equal(data.mode, 'training'); assert.equal(data.cameraMode, 'third'); assert.equal(data.floor, true);
       assert.ok(data.visibleMeshes.length > 2); assert.ok(data.gripError < .003);
       await page.screenshot({ path: path.join(directory, `${label}-third.png`) });
-      if (touch) await activate('#btn-camera'); else await page.keyboard.press('KeyX');
+      if (touch) await activate('#btn-camera');
+      else {
+        await page.mouse.move(640, 350); await page.mouse.wheel(0, -120);
+        await page.waitForFunction(() => __cdd.player.cameraMode === 'first');
+        await page.mouse.wheel(0, -120);
+        assert.equal(await page.evaluate(() => __cdd.player.cameraMode), 'first', 'one scroll direction must not flicker between views');
+        await page.mouse.wheel(0, 120);
+        await page.waitForFunction(() => __cdd.player.cameraMode === 'third');
+        await page.mouse.wheel(0, -120);
+      }
       await page.waitForFunction(() => __cdd.player.cameraMode === 'first');
       await page.waitForTimeout(150);
       const visible = await page.evaluate(() => __cdd.player.avatar.meshes.filter(mesh => mesh.visible).map(mesh => mesh.name));
@@ -44,6 +53,9 @@ async function run() {
       await page.waitForFunction(() => __cdd.paintball.weapon.id === 'automatic' && __cdd.paintball.aiming);
       await page.waitForTimeout(250);
       await page.screenshot({ path: path.join(directory, `${label}-automatic-aim.png`) });
+      assert.ok(await page.evaluate(() => __cdd.paintball.gun.getObjectByName('quaternius-automatic')));
+      await page.evaluate(() => __cdd.paintball.setColor('azul'));
+      await page.screenshot({ path: path.join(directory, `${label}-automatic-blue.png`) });
       // Keyboard activation exercises the accessible fire action on all layouts.
       if (touch) await page.locator('#btn-fire').press('Enter');
       else { await page.mouse.down(); await page.waitForTimeout(350); await page.mouse.up(); await page.mouse.up({ button: 'right' }); }
