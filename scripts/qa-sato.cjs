@@ -23,6 +23,7 @@ async function run() {
       const activate = async selector => touch ? page.locator(selector).tap() : page.locator(selector).click();
       const checkpoint = await page.evaluate(() => __cdd.player.feet.toArray());
       await activate('#training');
+      await activate('#character-list button'); await activate('#character-confirm');
       await page.waitForFunction(() => __cdd.player.active && __cdd.game.training.active);
       await page.waitForTimeout(350);
       assert.equal(await page.evaluate(() => getComputedStyle(__cdd.renderer.domElement).cursor), 'none');
@@ -70,11 +71,11 @@ async function run() {
       assert.equal(await page.locator('#play').evaluate(button => getComputedStyle(button).cursor), 'pointer');
       assert.deepEqual(await page.evaluate(() => __cdd.player.feet.toArray()), checkpoint);
       assert.equal(await page.evaluate(() => __cdd.paintball.stats.projectiles + __cdd.paintball.stats.marks), 0);
-      await activate('#play'); await page.waitForFunction(() => __cdd.game.mode === 'campaign' && __cdd.player.active);
+      await activate('#play'); await activate('#treta-single'); await activate('#character-confirm'); await page.waitForFunction(() => __cdd.game.mode === 'campaign' && __cdd.player.active);
       assert.equal(await page.evaluate(() => __cdd.game.training.floor.visible), false);
       if (touch) await activate('#btn-menu'); else await page.keyboard.press('Escape');
       await page.waitForFunction(() => __cdd.game.mode === null);
-      await activate('#tour'); await page.waitForFunction(() => __cdd.game.tour.active);
+      await activate('#tour'); await activate('#character-confirm'); await page.waitForFunction(() => __cdd.game.tour.active);
       // The mode event precedes the next player/paintball render update.
       await page.waitForFunction(() => !__cdd.player.avatar.root.visible && !__cdd.paintball.gun.visible);
       assert.equal(await page.evaluate(() => __cdd.player.avatar.root.visible), false);

@@ -7,6 +7,7 @@ import { createWeaponWheel } from './weapon-wheel.js';
 import { createSniperScope } from './sniper-scope.js';
 import { createTrainingPosePanel } from './training-pose.js';
 import { createCombatHUD } from './combat-hud.js';
+import { createCharacterMenu } from './character-menu.js';
 import './style.css';
 
 export { loading, createFrontMenu } from './front-menu.js';
@@ -29,6 +30,7 @@ export function createUI(game) {
   const sniperScope = createSniperScope(game);
   const posePanel = game.debug.trainingOnly ? createTrainingPosePanel(game) : null;
   const combatHUD = createCombatHUD(game);
+  const characters = createCharacterMenu(game);
 
   const toast = msg => {
     const el = $('toast'); el.textContent = msg; el.classList.add('show');
@@ -56,8 +58,11 @@ export function createUI(game) {
 
   function startCampaign(touch = touchSession) { startWalking('campaign', touch); }
 
-  function startMode(mode, touch = IS_TOUCH) {
+  function startMode(mode, touch = IS_TOUCH, characterChosen = false) {
     if (game.debug.trainingOnly) mode = 'training';
+    if (!game.debug.trainingOnly && !characterChosen) {
+      characters.open({ mode, onConfirm: () => startMode(mode, touch, true) }); return;
+    }
     if (mode === 'campaign' || mode === 'training') { startWalking(mode, touch); return; }
     game.audio?.setMenu(false);
     game.mode = 'tour'; player.stop(); training.stop(); tour.start(); touchSession = touch;
@@ -76,6 +81,7 @@ export function createUI(game) {
     document.body.classList.add('menu-open'); document.body.classList.remove('tour-active', 'training-active', 'flying');
     mapPanel.classList.remove('open'); overlay.classList.remove('hidden'); $('hud').classList.add('hidden');
     $('tour-panel').classList.add('hidden'); $('tour-markers').classList.add('hidden');
+    game.events.emit('menuopen');
   }
 
   function selectPoint(point, world) {
@@ -136,6 +142,7 @@ export function createUI(game) {
   syncCrouch();
   engine.renderer.domElement.addEventListener('wheel', event => {
     if (sniperScope.handleWheel(event)) return;
+    if (walkingMode() && !mapPanel.classList.contains('open') && player.zoomOrbit(event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1))) { event.preventDefault(); return; }
     if (!walkingMode() || !player.active || weaponWheel.open || mapPanel.classList.contains('open') || event.ctrlKey || !event.deltaY) return;
     event.preventDefault();
     // Direction selects a view, so a smooth trackpad gesture cannot flicker it.
@@ -154,7 +161,8 @@ export function createUI(game) {
   places.forEach((p, i) => {
     const item = document.createElement('li'); $('places-list').appendChild(item);
     placeButton(p, i, item).addEventListener('click', () => {
-      tour.stop(); training.stop(); player.placeAt(p.x, p.z, p.yaw); startCampaign(touchSession); toast(`Teletransportado: ${p.name}`);
+      const visit = () => { tour.stop(); training.stop(); player.placeAt(p.x, p.z, p.yaw); startCampaign(touchSession); toast(`Teletransportado: ${p.name}`); };
+      characters.open({ mode: 'campaign', onConfirm: visit });
     });
   });
   const markerPositions = [], projection = new THREE.Vector3();
@@ -245,7 +253,7 @@ export function createUI(game) {
     game.audio?.setMenu(true);
     mapPanel.classList.add('open'); overlay.classList.add('hidden'); player.stop();
     tour.controls.enabled = false;
-    $('map-mode-label').textContent = game.mode === 'tour' ? 'MAPA DO TOUR' : 'MAPA DA CAMPANHA';
+    $('map-mode-label').textContent = game.mode === 'tour' ? 'MAPA DO TOUR' : 'MAPA DA TRETA';
     $('map-help').textContent = game.mode === 'tour' ? 'Arraste · Roda ou dois dedos para zoom · Selecione um ponto para visitar · M para voltar' : 'Arraste · Roda ou dois dedos para zoom · Clique num ponto ou local para teleportar · M para voltar';
     hud.drawBigMap(tour.active ? engine.camera.position.x : player.feet.x, tour.active ? engine.camera.position.z : player.feet.z, player.yaw);
   }
@@ -279,5 +287,5 @@ export function createUI(game) {
     updateOrientation();
     if (tour.active) tour.setViewportInset(innerHeight - $('tour-panel').getBoundingClientRect().top + 12);
   });
-  return { toast, hud, posePanel, combatHUD, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); }, get weaponWheelOpen() { return weaponWheel.open; } };
+  return { toast, hud, posePanel, combatHUD, characters, startMode, showMenu, openMap, closeMap, selectPoint, get mapOpen() { return mapPanel.classList.contains('open'); }, get weaponWheelOpen() { return weaponWheel.open; } };
 }

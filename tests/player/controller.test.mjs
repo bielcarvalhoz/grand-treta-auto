@@ -141,3 +141,69 @@ test('both flight controls leave crouch and block crouching until flight ends', 
     player.setWeaponWheelOpen(false); player.stop(); assert.equal(player.toggleCrouch(), false);
   } finally { restore(); }
 });
+
+test('holstered orbit shows the front without rotating the body and re-equipping returns smoothly', () => {
+  const { player, camera, send, restore } = controllerFixture();
+  try {
+    player.setHolstered(true);
+    const yaw = player.yaw;
+    send('pointerdown', 1, 280, 400); send('pointermove', 1, 640, 400); player.update(.016);
+    assert.equal(player.yaw, yaw); assert.ok(camera.position.z < 0, 'camera can orbit around to the front');
+    const zoomBefore = player.orbitDistance;
+    assert.equal(player.zoomOrbit(-300), true); assert.ok(player.orbitDistance < zoomBefore);
+    for (let i = 0; i < 10; i++) player.zoomOrbit(5000);
+    assert.equal(player.orbitDistance, 8);
+    for (let i = 0; i < 10; i++) player.zoomOrbit(-5000);
+    assert.equal(player.orbitDistance, 1.05);
+    const rotation = camera.quaternion.clone(), position = camera.position.clone();
+    player.setHolstered(false);
+    assert.equal(player.cameraReturning, true); assert.ok(camera.quaternion.angleTo(rotation) < 1e-6);
+    assert.ok(camera.position.distanceTo(position) < 1e-6, 're-equipping does not snap the camera');
+    player.update(.05);
+    assert.ok(camera.quaternion.angleTo(rotation) > .001); assert.equal(player.yaw, yaw);
+    assert.equal(player.zoomOrbit(-100), false);
+    for (let i = 0; i < 12; i++) player.update(.05);
+    assert.equal(player.cameraReturning, false); assert.ok(Math.abs(player.yaw - yaw) < 1e-6);
+    assert.ok(camera.position.distanceTo(new THREE.Vector3(.48, 1.82, 3.15)) < 1e-6);
+  } finally { restore(); }
+});
+
+test('unarmed pinch changes distance without changing yaw; joystick stays independent and first person returns', () => {
+  const { player, camera, send, restore } = controllerFixture();
+  try {
+    player.setCameraMode('first'); player.setHolstered(true); assert.equal(player.cameraMode, 'third');
+    send('pointerdown', 1, 60, 600); send('pointermove', 1, 60, 574);
+    send('pointerdown', 2, 220, 400); send('pointerdown', 3, 310, 400);
+    const rotation = camera.quaternion.clone(), distance = player.orbitDistance;
+    send('pointermove', 3, 380, 400);
+    assert.ok(player.orbitDistance < distance); assert.ok(camera.quaternion.angleTo(rotation) < 1e-6);
+    player.update(.05); assert.ok(player.feet.z < 0, 'pinch does not steal the movement pointer');
+    send('pointercancel', 3, 380, 400); send('pointermove', 2, 240, 400);
+    assert.ok(camera.quaternion.angleTo(rotation) > .001, 'remaining touch resumes normal orbit');
+    player.setHolstered(false); for (let i = 0; i < 12; i++) player.update(.05);
+    assert.equal(player.cameraMode, 'first'); assert.ok(camera.position.distanceTo(player.eyePosition) < 1e-6);
+    player.setHolstered(true); player.setWeaponWheelOpen(true);
+    assert.equal(player.zoomOrbit(100), false);
+    player.stop(); assert.equal(player.zoomOrbit(100), false);
+  } finally { restore(); }
+});
+
+test('unarmed zoom and orbit still retract in front of walls', () => {
+  const { player, camera, restore } = controllerFixture((x, z) => z > 1.2 ? [x, 1.2] : [x, z]);
+  try {
+    player.setHolstered(true); player.zoomOrbit(5000); player.update(.016);
+    assert.ok(camera.position.z <= 1.2); assert.ok(camera.position.z > .5);
+  } finally { restore(); }
+});
+
+test('holstering and re-equipping do not release a held movement joystick', () => {
+  const { player, send, restore } = controllerFixture();
+  try {
+    send('pointerdown', 1, 60, 600); send('pointermove', 1, 60, 548); player.update(.05);
+    assert.ok(player.locomotion.speed > 9);
+    player.setHolstered(true); player.update(.05); assert.ok(player.locomotion.speed > 9);
+    player.setHolstered(false); player.update(.05); assert.ok(player.locomotion.speed > 9);
+    for (let i = 0; i < 12; i++) player.update(.05);
+    assert.ok(player.locomotion.speed > 9); assert.equal(player.cameraReturning, false);
+  } finally { restore(); }
+});

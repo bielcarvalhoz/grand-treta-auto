@@ -74,6 +74,9 @@ async function run() {
     await page.waitForTimeout(150);
     assert.equal(await page.evaluate(() => __cdd.renderer.info.render.frame), idleFrame, 'Opaque menus must not redraw the hidden city');
     await page.locator('#play').tap();
+    await page.locator('#treta-single').tap();
+    await page.locator('#character-list button').first().tap();
+    await page.locator('#character-confirm').tap();
     await page.waitForFunction(frame => __cdd.player.active && __cdd.renderer.info.render.frame > frame, idleFrame);
     await page.locator('#btn-menu').tap();
     assert.equal(await page.locator('#settings-open').isEnabled(), true);

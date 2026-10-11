@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings, createAudio, IS_TOUCH } from '../core/index.js';
+import { loadSettings, saveSettings, createAudio, createCharacterStore, IS_TOUCH } from '../core/index.js';
 
 import { startIntro } from './intro.js';
 
@@ -38,12 +38,14 @@ export function createFrontMenu({ trainingOnly = false } = {}) {
   if (trainingOnly) {
     endIntro();
     $('play').hidden = $('tour').hidden = true;
+    $('characters-open').hidden = true;
     $('places-list').hidden = true;
     const placesTitle = document.querySelector('.places-title'); if (placesTitle) placesTitle.hidden = true;
     $('training').querySelector('b').textContent = 'Retomar treino com debug';
     $('loading').querySelector('small').textContent = 'O treino com debug abre quando o carregamento terminar.';
   }
   const settings = loadSettings();
+  const characters = createCharacterStore();
   const audio = createAudio(settings);
   $('graphics').value = settings.quality; $('surroundings').value = settings.surroundings;
   for (const key of ['music','effects']) {
@@ -71,11 +73,16 @@ export function createFrontMenu({ trainingOnly = false } = {}) {
     if (e.target.matches?.('#overlay button, #tour-panel button, #map-panel button') && !e.target.disabled) audio.ui();
   });
   let game = null;
-  const modeButtons = [$('play'), $('training'), $('tour')];
+  const modeButtons = [$('play'), $('training'), $('tour'), $('characters-open')];
   for (const button of modeButtons) { button.disabled = true; button.setAttribute('aria-describedby', 'loading-text'); }
-  const settingsPanel = $('settings-panel'), options = document.querySelector('.menu-options');
+  const settingsPanel = $('settings-panel'), options = document.querySelector('.menu-options'), tretaMenu = $('treta-menu');
+  const showTreta = on => {
+    endIntro(); tretaMenu.classList.toggle('hidden', !on); options.classList.toggle('hidden', on);
+    if (on) $('treta-single').focus();
+  };
   const showSettings = on => {
     endIntro();
+    tretaMenu.classList.add('hidden');
     $('overlay').classList.toggle('settings-open', on);
     settingsPanel.classList.toggle('hidden', !on); options.classList.toggle('hidden', on);
   };
@@ -99,7 +106,12 @@ export function createFrontMenu({ trainingOnly = false } = {}) {
     if (failed || !game) return;
     game.ui.startMode(mode, touch);
   };
-  for (const [id, mode] of [['play', 'campaign'], ['training', 'training'], ['tour', 'tour']]) {
+  $('characters-open').addEventListener('click', () => { if (game && !trainingOnly) game.ui.characters.open(); });
+  $('treta-back').addEventListener('click', () => { showTreta(false); $('play').focus(); });
+  document.addEventListener?.('keydown', event => {
+    if (event.code === 'Escape' && !tretaMenu.classList.contains('hidden') && !game?.ui?.characters.openState) showTreta(false);
+  });
+  for (const [id, mode] of [['play', 'treta'], ['treta-single', 'campaign'], ['training', 'training'], ['tour', 'tour']]) {
     if (trainingOnly && mode !== 'training') continue;
     let pointerType = '';
     $(id).addEventListener('pointerdown', e => { pointerType = e.pointerType; });
@@ -108,13 +120,15 @@ export function createFrontMenu({ trainingOnly = false } = {}) {
     // a newly revealed tour marker underneath, accidentally focusing a building.
     $(id).addEventListener('click', e => {
       const type = e.pointerType || (e.detail ? pointerType : '');
+      if (mode === 'treta') { if (!failed && game) showTreta(true); return; }
       selectMode(mode, type === 'touch' || type === 'pen' || document.body.classList.contains('touch'));
     });
   }
   return {
-    settings, audio, introFinished: intro.finished,
+    settings, characters, audio, introFinished: intro.finished,
     ready(context) {
       game = context; loading.complete();
+      game.events?.on('menuopen', () => { showTreta(false); showSettings(false); });
       if (trainingOnly) {
         $('loading-text').textContent = 'Treino com debug pronto.';
         $('loading').querySelector('small').textContent = 'Retome o treino ou ajuste as configurações.';

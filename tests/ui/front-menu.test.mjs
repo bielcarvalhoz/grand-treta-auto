@@ -55,6 +55,13 @@ test('game modes wait for readiness; settings are usable and restart requires co
     assert.deepEqual(modes, []);
     send('pointerdown'); send('pointerup'); assert.deepEqual(modes, []);
     send('click'); assert.deepEqual(modes, [{mode: 'tour', touch: true}]);
+    el('play').dispatchEvent(new Event('click'));
+    assert.equal(el('treta-menu').classList.contains('hidden'), false);
+    assert.equal(modes.length, 1, 'Treta opens a submenu without entering the campaign');
+    el('treta-single').dispatchEvent(new Event('click'));
+    assert.deepEqual(modes.at(-1), {mode: 'campaign', touch: false});
+    el('treta-back').dispatchEvent(new Event('click'));
+    assert.equal(el('treta-menu').classList.contains('hidden'), true);
     el('training').dispatchEvent(new Event('click'));
     assert.deepEqual(modes.at(-1), {mode: 'training', touch: false});
     assert.equal(bar.attrs['aria-valuenow'], 100); assert.equal(label.textContent, '100%'); assert.equal(bar.child.style.transform, 'scaleX(1)');

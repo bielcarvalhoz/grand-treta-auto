@@ -292,6 +292,101 @@ body * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: no
 #tour-places { touch-action: pan-x; }
 .menu-options button:disabled, .menu-options #play:disabled { color: #a7abae; opacity: .45; cursor: wait; transform: none; filter: none; }
 .menu-options button:disabled::before, .menu-options #play:disabled::before { opacity: 0; }
+.menu-options button small { display: block; font: 12px 'Segoe UI', sans-serif; color: #b2b7bd; margin: 3px 0 8px; text-shadow: none; }
+#treta-menu button:disabled { cursor: default; }
+.menu-options { bottom: max(20vh, 118px); }
+.menu-location { margin-bottom: 7px; }
+
+/* Character selection and creation share the same live model stage. */
+#character-panel { width: min(1120px, 96vw); max-width: none; max-height: 94dvh; padding: 24px; overflow: auto; color: #f5f0e5; background: #0c151f; border: 1px solid #3a4b5b; border-top: 3px solid #ffc940; border-radius: 10px; }
+#character-panel::backdrop { background: #020710e8; }
+.character-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.character-header h2 { margin: 8px 0 6px; font: 400 clamp(25px, 3vw, 36px) 'Cover', sans-serif; }
+.character-header p, .character-roster p { font-size: 12px; color: #9cabb9; line-height: 1.5; }
+#character-panel button { min-height: 44px; font: 600 13px 'Segoe UI', sans-serif; color: #f5f0e5; background: #1a2a39; border: 1px solid #415165; border-radius: 5px; padding: 10px 14px; cursor: pointer; }
+#character-panel button:focus-visible, #character-panel select:focus-visible, #character-panel input:focus-visible { outline: 2px solid #ffc940; outline-offset: 3px; }
+#character-panel button:disabled { opacity: .4; cursor: default; }
+#character-panel #character-close { font-size: 20px; flex-shrink: 0; }
+.character-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; margin-top: 12px; }
+.character-roster { min-width: 0; }
+.character-roster h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #c5cdd4; }
+#character-list { display: grid; gap: 7px; max-height: 240px; overflow-y: auto; padding: 3px; }
+#character-list button { display: flex; gap: 11px; align-items: center; text-align: left; overflow-wrap: anywhere; }
+#character-list i { width: 24px; height: 29px; border-radius: 8px 8px 4px 4px; border: 1px solid #ffffff55; flex-shrink: 0; }
+#character-list button[aria-pressed="true"] { border-color: #ffc940; background: #39402b; }
+#character-new, #character-edit { margin-top: 9px; width: 100%; }
+.character-stage { min-width: 0; position: relative; min-height: 340px; border: 1px solid #334c61; border-radius: 8px; overflow: hidden; background: radial-gradient(ellipse at 50% 35%, #294357, #111e2a); }
+#character-preview { width: 100%; height: 360px; }
+#character-preview canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.character-preview-caption { position: absolute; left: 12px; right: 12px; bottom: 10px; text-align: center; pointer-events: none; text-shadow: 0 2px 4px #000; }
+.character-preview-caption b { display: block; font-size: 18px; overflow-wrap: anywhere; }
+.character-preview-caption span { display: block; margin-top: 4px; font-size: 10px; color: #aebfcd; }
+#character-panel.editing[open] { display: flex; flex-direction: column; height: min(740px, 94dvh); overflow: hidden; }
+#character-panel.editing .character-layout { grid-template-columns: 175px minmax(220px, 1fr) minmax(260px, 1.1fr); flex: 1; min-height: 0; }
+#character-panel.editing .character-stage { min-height: 0; }
+#character-panel.editing #character-preview { height: 100%; }
+#character-editor { max-height: 420px; overflow-y: auto; padding: 3px 9px 3px 3px; }
+#character-editor label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: #b6c3ce; min-width: 0; }
+#character-editor input, #character-editor select { width: 100%; min-width: 0; min-height: 40px; border: 1px solid #4c6275; border-radius: 4px; background: #172938; color: #fff; font: 14px 'Segoe UI', sans-serif; padding: 6px; }
+#character-name { font-size: 16px !important; margin-bottom: 12px; }
+#character-editor input[type="color"] { padding: 4px; cursor: pointer; }
+#character-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; }
+.character-edit-actions { display: flex; gap: 8px; flex-shrink: 0; }
+#character-panel #character-save, #character-panel #character-confirm { color: #16202b; background: #ffc940; border-color: #ffc940; }
+.character-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding-top: 14px; border-top: 1px solid #344253; }
+#character-status { font-size: 12px; color: #bac8d4; line-height: 1.5; margin: 0; }
+#character-confirm { flex-shrink: 0; }
+#character-panel, #character-editor, #character-list { touch-action: pan-y; overscroll-behavior: contain; }
+#character-editor input { -webkit-user-select: text; user-select: text; touch-action: manipulation; }
+body.holstered #crosshair { display: none; }
+@media (max-width: 800px) {
+  #character-panel { padding: 16px; }
+  #character-panel.editing .character-layout { grid-template-columns: 150px minmax(0, 1fr); }
+  #character-editor { grid-column: 1 / -1; max-height: none; }
+  #character-panel.editing .character-layout { grid-template-rows: minmax(150px, .8fr) minmax(0, 1fr); }
+  #character-panel.editing #character-editor { min-height: 0; }
+  .character-layout { grid-template-columns: 150px minmax(0, 1fr); gap: 12px; }
+}
+@media (max-width: 500px) {
+  #character-panel { width: 97vw; max-height: 96dvh; padding: 13px; }
+  .character-layout, #character-panel.editing .character-layout { grid-template-columns: 1fr; }
+  .character-roster { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .character-roster h3, #character-list { grid-column: 1 / -1; }
+  #character-list { display: flex; max-height: 110px; overflow-x: auto; }
+  #character-list button { min-width: 120px; }
+  .character-roster p { display: none; }
+  #character-new, #character-edit { margin-top: 0; }
+  #character-preview { height: 265px; }
+  .character-stage { min-height: 265px; }
+  #character-panel.editing .character-roster, #character-panel.editing #character-description { display: none; }
+  #character-panel.editing .character-layout { grid-template-rows: minmax(150px, .8fr) minmax(0, 1fr); }
+  .character-header p { margin: 5px 0; }
+  .character-footer { flex-direction: column; align-items: stretch; gap: 9px; }
+  .character-roster h3 { margin-bottom: 0; }
+  .character-edit-actions { justify-content: space-between; }
+  #character-panel .character-edit-actions button { padding: 9px; }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .menu-options, #treta-menu { bottom: 100px; }
+  .menu-options button, .menu-options #play { min-height: 34px; font-size: 22px; }
+  .menu-location { margin-bottom: 4px; }
+  #character-panel { max-height: 96dvh; padding: 12px 18px; }
+  .character-header h2 { font-size: 25px; margin: 4px 0; }
+  #character-preview { height: 235px; }
+  .character-stage { min-height: 235px; }
+  #character-panel.editing .character-layout { grid-template-columns: 140px minmax(180px, 1fr) minmax(240px, 1.2fr); }
+  #character-panel.editing .character-layout { grid-template-rows: minmax(0, 1fr); }
+  #character-editor { grid-column: auto; max-height: none; min-height: 0; }
+  #character-panel.editing[open] { height: 96dvh; }
+  #character-panel.editing .character-header p { display: none; }
+  #character-panel.editing .character-footer { margin-top: 10px; padding-top: 8px; }
+  #character-panel.editing .character-roster p { display: none; }
+}
+@media (max-height: 720px) and (max-width: 700px) and (orientation: portrait) {
+  .gta-logo { top: 23%; }
+  .menu-options { bottom: 112px; gap: 0; }
+  .menu-options button, .menu-options #play { min-height: 42px; font-size: 28px; }
+}
 #settings-restart { width: min(440px, 90vw); background: #111c25; color: #eef2f6; border: 1px solid #52606a; border-top: 3px solid #ed303b; border-radius: 8px; padding: 24px; }
 #settings-restart::backdrop { background: #03090ddd; }
 #settings-restart h2 { margin: 0 0 14px; font: 400 28px 'Cover', sans-serif; }

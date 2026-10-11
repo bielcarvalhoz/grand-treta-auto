@@ -23,7 +23,9 @@ npm install
 npm run dev
 ```
 
-Abra http://localhost:5173 e escolha **Campanha**, **Modo treino** ou **Modo tour**. A capa **Grand Treta Auto: City of God** monta um mosaico cartoon com recortes diagonais e revela o logo letra por letra enquanto os dados da cidade são baixados. A montagem 3D começa depois da abertura (ou ao pulá-la), para não travar as imagens nem a escrita do título.
+Abra http://localhost:5173 e escolha **Modo treta**, **Modo treino** ou **Modo tour**. O modo Treta abre um submenu: **Um jogador** mantém a campanha atual; **Multijogador** está marcado como em breve. Antes de entrar em qualquer modo, escolha e confirme um personagem. A capa **Grand Treta Auto: City of God** monta um mosaico cartoon com recortes diagonais e revela o logo letra por letra enquanto os dados da cidade são baixados. A montagem 3D começa depois da abertura (ou ao pulá-la), para não travar as imagens nem a escrita do título.
+
+Em **Personagens**, use Sato ou crie vários personagens com nome, cabelo (original, fade, espetado, moicano, afro ou raspado), olhos, barba, cores e estilos de camiseta, calça e tênis, além de óculos, máscara, boné, touca ou fones. A prévia 3D usa o mesmo modelo e rig do jogo, com órbita e zoom. Salve o visual e confirme a escolha. Personagens e a última seleção ficam neste navegador; cancelar uma edição mantém o visual salvo. Não há contas ou sincronização entre aparelhos nesta etapa.
 
 O **Modo treino** abre um espaço quadriculado com caixas físicas Rapier de madeira (1,20 m / 6 kg) e metal (1,60 m / 72 kg), além de uma cópia de cada arma no chão. A caixa de metal fica à direita, fora da faixa das armas. Cada quadrado mede 2 metros. Use-o para andar, correr, pular e testar tiros, golpes e câmeras. Na campanha há as mesmas caixas no campo de futebol e armas extras ao redor. Ao sair do treino, a posição anterior na cidade é restaurada.
 
@@ -33,7 +35,7 @@ O treino inclui um **laboratório de combate** com botões físicos à esquerda:
 
 O personagem **Sato**, carregado de `public/models/sato.glb`, começa com Glock-18, M4A4 e faca. São **2 slots de fogo + 1 melee**, com socos sempre disponíveis. O catálogo inclui revólver R8, Nova, AWP, MP5-SD, três facas, machado e bastão com arame. As referências de dano, cadência e funcionamento estão em [docs/weapons.md](docs/weapons.md). Todas as armas mantêm detalhes na cor escolhida; melee e socos não pintam o chão. `X`, o ícone discreto à esquerda ou o scroll alternam primeira/terceira pessoa. As vistas compartilham o mesmo Sato e suas animações de tiro, espada e sequência de socos.
 
-`Z` guarda a arma ou a guarda de socos, deixando o personagem no idle normal; pressione novamente para equipar a mesma seleção. `C` alterna agachado/em pé, parado ou andando, com câmera mais baixa e velocidade reduzida. No celular, as duas ações têm botões ao lado da tinta. Durante o voo da campanha, Sato nada comicamente no ar usando a animação original completa.
+`Z` guarda a arma ou a guarda de socos, deixando o personagem no idle normal. Desarmado, o mouse/arraste orbita livremente ao redor do corpo, inclusive pela frente; scroll ou pinça com dois dedos à direita ajusta a distância de 1,05 a 8 m. O analógico esquerdo continua independente. Ao equipar novamente, a câmera volta suavemente à posição de combate em cerca de meio segundo, restaurando a vista anterior (primeira ou terceira pessoa). `C` alterna agachado/em pé, parado ou andando, com câmera mais baixa e velocidade reduzida. No celular, as duas ações têm botões ao lado da tinta. Durante o voo da treta, Sato nada comicamente no ar usando a animação original completa.
 
 No celular, jogue em pé ou deitado: a intensidade do analógico controla caminhada, trote e corrida em qualquer direção. Segure e arraste o botão de ataque para mirar enquanto ataca. Segure o botão da arma ou `Q` para abrir a roda, indique a opção com dedo, mouse ou analógico e solte para equipar. Perto de uma arma, use o botão de pegar ou `E`: o slot de fogo selecionado (ou o último usado) é substituído; melee troca só o slot 3. A arma anterior fica no chão. Há botões de câmera, pulo, voo, mapa, menu e orientação.
 
@@ -53,7 +55,7 @@ A música original dos menus e os efeitos de navegação/paintball usam Web Audi
 | `E` | pegar arma próxima e soltar a anterior do slot |
 | `X` | alternar primeira/terceira pessoa |
 | `B` | abrir/fechar ajustes de armas e braços (somente em `/debug`) |
-| Scroll ↑ / ↓ | aumentar / reduzir zoom no escopo da AWP; fora dele, primeira / terceira pessoa |
+| Scroll ↑ / ↓ | desarmado: aproximar / afastar; no escopo da AWP: ampliar / reduzir; demais casos: primeira / terceira pessoa |
 | Botão direito | segurar mira focada |
 | `M` | mapa — clique para se teletransportar |
 | `1`–`7` | teletransporte (as 3 portarias do campus e outros lugares) |
@@ -135,9 +137,9 @@ advogado o uso dos nomes/cores da marca.
 
 ## Menu, tour e configurações
 
-A tela inicial Grand Treta Auto: City of God oferece **Campanha** (exploração atual), **Modo treino**
+A tela inicial Grand Treta Auto: City of God oferece **Modo treta** (um jogador mantém a campanha atual; multijogador em breve), **Modo treino**
 (espaço plano para testar o personagem e as armas), **Modo tour**
-(visão aérea, aproximação de estruturas e órbita) e **Configurações**. A cidade
+(visão aérea, aproximação de estruturas e órbita), **Personagens** e **Configurações**. Todo modo exige confirmar um personagem antes de entrar. A cidade
 carrega em segundo plano com barra de progresso por etapas. O padrão é gráfico
 **Med** com o entorno de Osasco **desabilitado**. Configurações são salvas por aparelho;
 aplicar mudanças reconstrói a cena e retorna ao menu.
