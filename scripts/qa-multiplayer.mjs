@@ -92,6 +92,10 @@ try {
   wood.body.setTranslation({ x: field.x + field.ux * u, y: field.y + .63, z: field.z + field.uz * u }, true);
   wood.body.setLinvel({ x: -field.ux * 20, y: 0, z: -field.uz * 20 }, true); wood.lastTouch = pa.entity.id;
   await b.waitForFunction(() => __cdd.game.multiplayer.snapshot.football.score[0] === 1);
+  assert.ok(await b.evaluate(() => {
+    const pickup = document.querySelector('#btn-pickup'), emotes = document.querySelector('.mp-emotes');
+    return pickup.hidden || pickup.getBoundingClientRect().bottom + 4 <= emotes.getBoundingClientRect().top;
+  }), 'mobile pickup prompt must stay above the emoji buttons');
   await b.screenshot({ path: path.join(directory, 'mobile-football.png') });
   const defense = app.world.landmarks.defense; relocate(pa, defense.x, defense.z);
   await a.waitForFunction(() => __cdd.game.multiplayer.nearby?.id === 'defense');

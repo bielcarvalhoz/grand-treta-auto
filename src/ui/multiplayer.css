@@ -46,7 +46,7 @@ body.multiplayer-active #hud #btn-fly, body.multiplayer-active #hud .hud-left > 
 body.multiplayer-active:not(.touch) .desktop-menu { top: 212px; }
 body.multiplayer-active:not(.touch) .camera-toggle { top: 255px; }
 body.multiplayer-active.touch .hud-left > .utility-controls { margin-top: 216px; }
-body.multiplayer-active #btn-pickup { bottom: 122px; }
+body.multiplayer-active #hud #btn-pickup { bottom: 122px; }
 @media (max-width: 700px) {
   .mp-lobby { padding: 16px; max-height: calc(100dvh - 24px); }
   .mp-status { top: 12px; left: 12px; width: 230px; padding: 8px; }
@@ -60,7 +60,7 @@ body.multiplayer-active #btn-pickup { bottom: 122px; }
   .mp-status { top: 12px; width: min(248px, calc(100vw - 164px)); }
   .mp-emotes { bottom: max(186px, calc(env(safe-area-inset-bottom) + 176px)); }
   #mp-interact { bottom: 234px; }
-  body.multiplayer-active #btn-pickup { bottom: 234px; }
+  body.multiplayer-active #hud #btn-pickup { bottom: 234px; }
   .mp-heading h2 { font-size: 19px; }
   .mp-lobby form { gap: 6px; }
   .mp-lobby button { padding: 10px; }
