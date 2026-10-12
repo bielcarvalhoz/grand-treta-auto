@@ -6,6 +6,8 @@ import { createTrainingLab } from './training-lab.js';
 import { DIFFICULTIES } from './config.js';
 export { DEFAULT_COMBAT_RULES, DIFFICULTIES } from './config.js';
 export { createCombatSimulation, COMBAT_STEP } from './simulation.js';
+export { traceHitboxes, updateHumanoidHitboxes } from './hitboxes.js';
+export { createActorView } from './actors.js';
 
 export async function createCombatModule(game, { base = '/', models, weaponModels } = {}) {
   models ||= await loadCombatModels(base);
@@ -100,7 +102,7 @@ export async function createCombatModule(game, { base = '/', models, weaponModel
     const marked = markPoint(target); if (marked) simulation.setZombieGoal('point', pointMarker.position); return marked;
   }
   const api = {
-    root, simulation, views, player, objective, spawn: add, horde, targets, reset, scenario, markPoint, markAimPoint,
+    root, simulation, views, models, player, objective, spawn: add, horde, targets, reset, scenario, markPoint, markAimPoint,
     get showHitboxes() { return showHitboxes; }, set showHitboxes(value) { showHitboxes = !!value; },
     get canPlayerAct() { return !game.training.active || !player.dead; },
     configure(next) { return simulation.configure(next); },

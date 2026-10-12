@@ -11,17 +11,18 @@ export function createPaintballModule(game) {
   const { scene, camera, renderer } = game.engine;
   const $ = (id) => document.getElementById(id);
   const player = game.player;
-  const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen && !game.ui?.weaponWheelOpen && !game.ui?.combatHUD?.panelOpen && (game.combat?.canPlayerAct ?? true);
+  const paintEnabled = () => (player.active || game.debug.inspectionView === 'tinta') && !game.ui?.mapOpen && !game.ui?.weaponWheelOpen && !game.ui?.combatHUD?.panelOpen && (game.combat?.canPlayerAct ?? true) && (game.multiplayer?.canAct ?? true);
   const paintball = createPaintball({
     scene, camera, getActive: paintEnabled,
     getCameraMode: () => player.cameraMode,
     colliderRoots: () => game.training?.active ? [game.training.floor, game.training.root, game.dynamicProps?.root].filter(Boolean) : [scene],
-    traceActors: (from, to) => game.combat?.raycast(from, to),
+    traceActors: (from, to) => game.multiplayer?.active ? game.multiplayer.raycast(from, to) : game.combat?.raycast(from, to),
     updateWeaponPose: (gun, state) => player.updateWeapon?.(gun, state),
     getShotOrigin: target => player.getShotOrigin ? player.getShotOrigin(target) : camera.getWorldPosition(target),
-    onShot: (weapon, recoil) => { game.audio?.shot(weapon); player.avatar?.playShot(recoil?.recoilStrength); },
+    onShot: (weapon, recoil) => { game.audio?.shot(weapon); player.avatar?.playShot(recoil?.recoilStrength); game.multiplayer?.attack(weapon, recoil); },
     onAttack: (weapon, state) => { game.audio?.melee?.(weapon); player.avatar?.playAttack?.(weapon, state); },
-    onImpact: (hit, info) => { if (!game.combat?.impact(hit, info)) game.dynamicProps?.impact(hit, info); },
+    onStrike: (weapon, info) => game.multiplayer?.attack(weapon, info),
+    onImpact: (hit, info) => { if (game.multiplayer?.active) return; if (!game.combat?.impact(hit, info)) game.dynamicProps?.impact(hit, info); },
   });
   game.events.on('modechange', () => { paintball.resetInput(); paintball.clearEffects(); });
 

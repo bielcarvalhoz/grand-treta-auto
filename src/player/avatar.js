@@ -160,8 +160,16 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
     }
     appearance.setHeadVisible(!!preview || player.cameraMode === 'third');
   }
+  let greeting = 0;
+  const greetingBones = ['DEF-upper_armR', 'DEF-forearmR'].map(name => bones[name]).filter(Boolean);
+  const greetingBase = new Map();
+  function restoreGreeting() {
+    for (const [bone, rotation] of greetingBase) bone.quaternion.copy(rotation);
+    greetingBase.clear();
+  }
   function update(dt) {
     firstPersonFists.restore();
+    restoreGreeting();
     root.scale.setScalar(!preview && !player.fly && player.cameraMode === 'first' && heldKind === 'melee' ? MELEE_VIEW_SCALE : 1);
     root.position.copy(player.feet);
     if (player.cameraMode === 'first' && !preview) {
@@ -238,6 +246,13 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
         head.quaternion.copy(head.parent.getWorldQuaternion(quaternion()).invert()
           .multiply(root.quaternion).multiply(uprightHead));
       }
+    }
+    if (greeting > 0 && !preview && !player.fly) {
+      greeting = Math.max(0, greeting - Math.max(0, dt));
+      const weight = Math.min(1, greeting / .25, (2.5 - greeting) / .2);
+      for (const bone of greetingBones) greetingBase.set(bone, bone.quaternion.clone());
+      if (bones['DEF-upper_armR']) bones['DEF-upper_armR'].rotation.z -= weight * 1.85;
+      if (bones['DEF-forearmR']) { bones['DEF-forearmR'].rotation.x -= weight * 1.2; bones['DEF-forearmR'].rotation.y += weight * Math.sin(greeting * 13) * .45; }
     }
     evaluatedCamera.copy(camera.quaternion); evaluatedEye.copy(player.eyePosition);
     root.updateMatrixWorld(true);
@@ -368,7 +383,7 @@ export function createAvatarFromGLTF(gltf, { scene, camera, player }) {
   }
   update(0);
   return { root, model, bones, meshes, mixer, clips, scale, update, updateWeapon, playShot, playAttack, setWeapon,
-    setPreviewAnimation, weaponDiagnostics, animationState, poseConfig, appearance };
+    setPreviewAnimation, weaponDiagnostics, animationState, poseConfig, appearance, playGreeting() { greeting = 2.5; } };
 }
 
 export async function loadPlayerAvatar(options, url) {

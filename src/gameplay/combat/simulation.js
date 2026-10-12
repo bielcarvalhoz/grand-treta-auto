@@ -14,9 +14,9 @@ const aimPoint = (entity, head = false) => {
 
 /** The single local authority. Rendering does not own health, kills, targeting,
  * movement, attack timing or respawn. No DOM, camera or renderer is required. */
-export function createCombatSimulation({ bounds, rules: overrides, random = Math.random, onEvent = () => {}, traceScenery = () => null } = {}) {
+export function createCombatSimulation({ bounds, rules: overrides, random = Math.random, onEvent = () => {}, traceScenery = () => null, navigationOptions } = {}) {
   const world = new World(), actors = world.with('health', 'position', 'hitboxes'), agents = world.with('ai', 'steering').without('dead');
-  const navigation = createFlowField({ bounds });
+  const navigation = createFlowField({ bounds, ...navigationOptions });
   let rules = combatRules(overrides), serial = 0, time = 0, accumulator = 0, disposed = false;
   let obstacles = [], player = null, objective = null, zombieGoal = 'players', goalPoint = null, pausedAI = false;
   const events = (type, data = {}) => onEvent({ type, time, ...data });
