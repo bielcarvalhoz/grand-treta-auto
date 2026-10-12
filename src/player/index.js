@@ -25,8 +25,8 @@ export function createPlayerModule(game) {
       return game.combat?.collide(dx, dz, r, feetY) || [dx, dz];
     },
     roofAt: (x, z, y) => Math.max((training() || physics).roofAt(x, z, y), game.dynamicProps?.roofAt(x, z, y) ?? -Infinity),
-    allowFlight: () => !training(),
-    canAct: () => (game.combat?.canPlayerAct ?? true) && !game.ui?.combatHUD?.panelOpen,
+    allowFlight: () => !training() && game.mode !== 'multiplayer',
+    canAct: () => (game.combat?.canPlayerAct ?? true) && (game.multiplayer?.canAct ?? true) && !game.ui?.combatHUD?.panelOpen,
   });
   const spawn = game.places[0] || { x: 0, z: 0, yaw: 0 };
   player.placeAt(spawn.x, spawn.z, spawn.yaw);

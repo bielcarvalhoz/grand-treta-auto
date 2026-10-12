@@ -38,6 +38,18 @@ test('neutral idle stays standing and both views reuse the same skinned arm mesh
   assert.deepEqual(avatar.meshes, meshes); assert.deepEqual(meshes.map(mesh => mesh.material), materials);
 });
 
+test('greeting survives repeated socket evaluations without accumulating arm rotation and returns to idle', async () => {
+  const { avatar, gun } = await fixture(), baseline = await fixture();
+  avatar.playGreeting();
+  for (let frame = 0; frame < 180; frame++) {
+    avatar.update(1 / 60); baseline.avatar.update(1 / 60);
+    const before = avatar.bones['DEF-upper_armR'].quaternion.clone();
+    for (let i = 0; i < 4; i++) { avatar.update(0); avatar.updateWeapon(gun, { weapon: 'pistol', kind: 'firearm' }); }
+    assert.ok(before.normalize().angleTo(avatar.bones['DEF-upper_armR'].quaternion.clone().normalize()) < 1e-5, 'zero-time evaluations cannot compound a gesture');
+  }
+  for (const name of ['DEF-upper_armR', 'DEF-forearmR']) assert.ok(avatar.bones[name].quaternion.clone().normalize().angleTo(baseline.avatar.bones[name].quaternion.clone().normalize()) < 1e-5, 'the gesture must leave no residual pose');
+});
+
 test('thumb web fills only the hand base without rewriting original vertices or adding meshes', async () => {
   const original = await loadAvatarGeometry(asset), { avatar } = await fixture();
   for (const side of ['R', 'L']) {

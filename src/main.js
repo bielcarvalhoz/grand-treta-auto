@@ -14,6 +14,7 @@ import { loadCampusData, createCampusPlugin } from './campus/index.js';
 import { createPlayerModule } from './player/index.js';
 import { createPaintballModule, loadWeaponModels, createWeaponPickups } from './gameplay/paintball/index.js';
 import { createCombatModule } from './gameplay/combat/index.js';
+import { createMultiplayerModule } from './gameplay/multiplayer/index.js';
 import { createUI, loading, applyDeviceClasses, createFrontMenu } from './ui/index.js';
 import { installDebug } from './debug/index.js';
 
@@ -52,6 +53,7 @@ async function main() {
   game.paintball = createPaintballModule(game);
   game.paintball.setWeaponModels(weaponModels);
   game.weaponPickups = createWeaponPickups(game, weaponModels);
+  game.multiplayer = createMultiplayerModule(game, { weaponModels });
   game.ui = createUI(game);
   game.styler = setupVisualStyle(game); // depois de tudo estar na cena
   game.ui.showMenu();

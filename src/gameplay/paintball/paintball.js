@@ -81,7 +81,7 @@ function tracePaintMeshes(raycaster, from, to, meshes, ignored) {
 }
 
 /** Inputs belong to the existing player/UI, so looking by dragging never fires. */
-export function createPaintball({ scene, camera, getActive = () => true, getCameraMode = () => 'first', colliderRoots = () => [scene], traceActors = () => null, onShot = () => {}, onAttack = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
+export function createPaintball({ scene, camera, getActive = () => true, getCameraMode = () => 'first', colliderRoots = () => [scene], traceActors = () => null, onShot = () => {}, onAttack = () => {}, onStrike = () => {}, onImpact = () => {}, updateWeaponPose, getShotOrigin, random = Math.random }) {
   const root = new THREE.Group(); root.name = 'paintball-effects'; root.userData.paintballIgnore = true; scene.add(root);
   const gun = new THREE.Group(); gun.name = 'pistolinha-tinta'; gun.userData.paintballIgnore = true;
   const pistolModel = new THREE.Group(), autoModel = new THREE.Group();
@@ -246,7 +246,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
       ball.mesh.material = colors[colorIndex].ball; ball.mesh.userData.paintColor = colorIndex; ball.mesh.visible = true; ball.age = 0;
     }
     recoil = weapon.recoilStrength; recoilDecay = weapon.recoilDecay;
-    shots++; onShot(weapon.id, { recoilStrength: weapon.recoilStrength, recoilDecay: weapon.recoilDecay });
+    shots++; onShot(weapon.id, { recoilStrength: weapon.recoilStrength, recoilDecay: weapon.recoilDecay, origin: muzzleOrigin.clone(), direction: direction.clone(), aiming });
   }
 
   function meleeImpact(weapon) {
@@ -256,6 +256,7 @@ export function createPaintball({ scene, camera, getActive = () => true, getCame
     target.copy(origin).addScaledVector(forward, 100);
     const aim = trace(origin, target); if (aim) target.copy(aim.point);
     const direction = target.clone().sub(shotOrigin).normalize();
+    onStrike(weapon, { origin: shotOrigin.clone(), direction: direction.clone() });
     const right = new THREE.Vector3().crossVectors(direction, new THREE.Vector3(0, 1, 0)).normalize();
     let closest = null;
     // A short swept fan covers the hand/blade width while respecting walls

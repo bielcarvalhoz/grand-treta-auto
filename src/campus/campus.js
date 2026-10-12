@@ -125,7 +125,7 @@ function roadIndex(roads) {
 }
 
 // ================================================================ 1) preparar
-export function prepareCampus(geo, world, proj) {
+export function prepareCampus(geo, world, proj, { createCanvas = () => document.createElement('canvas') } = {}) {
   if (!world.quarter) return null;
   const quarter = world.quarter;
   const toLocal = (ring) => openRing(ring.map(([lon, lat]) => proj.toLocal(lon, lat)));
@@ -238,7 +238,7 @@ export function prepareCampus(geo, world, proj) {
   C.insideSolid = insideSolid;
 
   // -- muro + portarias
-  computeWalls(C, quarter[0], carRoads, RI, insideSolid);
+  computeWalls(C, quarter[0], carRoads, RI, insideSolid, createCanvas);
 
   // -- árvores reais (copas do satélite), sem tronco em rua, prédio, muro, água...
   const noTree = [];
@@ -376,7 +376,7 @@ function makeTrack(field) {
 // rasterizada (0,5 m) e o contorno é extraído com marching squares: os laços saem sempre
 // FECHADOS (inclusive dos dois lados de ruas públicas que atravessam o terreno). Depois
 // abrem-se vãos só onde passam vias de acesso (portarias/portões) e portarias de pedestres.
-function computeWalls(C, ring, carRoads, RI, insideSolid) {
+function computeWalls(C, ring, carRoads, RI, insideSolid, createCanvas) {
   const SIDEWALK = 2.2, RES = 0.5;
   const isAccessType = (r) => r.highway === 'service' || r.internal || INTERNAL_NAME.test(r.name || '');
   // vias de acesso: cruzam o limite do bairro e são de serviço / internas
@@ -391,7 +391,7 @@ function computeWalls(C, ring, carRoads, RI, insideSolid) {
   // 1) raster da região murada
   const bb = bboxOf(ring, 30);
   const W = Math.ceil((bb.maxX - bb.minX) / RES), H = Math.ceil((bb.maxZ - bb.minZ) / RES);
-  const cv = document.createElement('canvas');
+  const cv = createCanvas();
   cv.width = W; cv.height = H;
   const g2 = cv.getContext('2d', { willReadFrequently: true });
   const P = ([x, z]) => [(x - bb.minX) / RES, (z - bb.minZ) / RES];

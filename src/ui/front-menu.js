@@ -73,7 +73,7 @@ export function createFrontMenu({ trainingOnly = false } = {}) {
     if (e.target.matches?.('#overlay button, #tour-panel button, #map-panel button') && !e.target.disabled) audio.ui();
   });
   let game = null;
-  const modeButtons = [$('play'), $('training'), $('tour'), $('characters-open')];
+  const modeButtons = [$('play'), $('training'), $('tour'), $('characters-open'), $('treta-multi')];
   for (const button of modeButtons) { button.disabled = true; button.setAttribute('aria-describedby', 'loading-text'); }
   const settingsPanel = $('settings-panel'), options = document.querySelector('.menu-options'), tretaMenu = $('treta-menu');
   const showTreta = on => {
@@ -111,7 +111,7 @@ export function createFrontMenu({ trainingOnly = false } = {}) {
   document.addEventListener?.('keydown', event => {
     if (event.code === 'Escape' && !tretaMenu.classList.contains('hidden') && !game?.ui?.characters.openState) showTreta(false);
   });
-  for (const [id, mode] of [['play', 'treta'], ['treta-single', 'campaign'], ['training', 'training'], ['tour', 'tour']]) {
+  for (const [id, mode] of [['play', 'treta'], ['treta-single', 'campaign'], ['treta-multi', 'multiplayer'], ['training', 'training'], ['tour', 'tour']]) {
     if (trainingOnly && mode !== 'training') continue;
     let pointerType = '';
     $(id).addEventListener('pointerdown', e => { pointerType = e.pointerType; });
